@@ -1,48 +1,41 @@
 
 import React from 'react';
-import { 
-  LayoutDashboard, 
-  Camera, 
-  Users, 
-  ShoppingBag, 
-  Settings, 
-  LogOut,
-  Image as ImageIcon,
-  Share2,
-  Trash2,
-  Download,
-  CheckCircle,
-  Eye,
-  Plus,
-  ArrowLeft,
-  Search,
-  Check
-} from 'lucide-react';
+import * as LucideIcons from 'lucide-react';
+
+// Função de segurança para garantir que o ícone existe antes de tentar renderizar
+const safeIcon = (iconName: keyof typeof LucideIcons, size = 20) => {
+  const IconComponent = LucideIcons[iconName] as any;
+  if (!IconComponent) {
+    // Retorna um fallback visual caso o ícone falhe
+    return <div style={{ width: size, height: size, border: '1px solid currentColor', opacity: 0.5, borderRadius: '4px' }} />;
+  }
+  return <IconComponent size={size} />;
+};
 
 export const COLORS = {
-  primary: '#d4af37', // Gold for a premium feel
+  primary: '#d4af37',
   secondary: '#1e293b',
-  bg: '#0f172a',
+  bg: '#020617',
   accent: '#3b82f6',
   success: '#22c55e',
   danger: '#ef4444'
 };
 
 export const ICONS = {
-  Dashboard: <LayoutDashboard size={20} />,
-  Albums: <Camera size={20} />,
-  Clients: <Users size={20} />,
-  Orders: <ShoppingBag size={20} />,
-  Config: <Settings size={20} />,
-  Logout: <LogOut size={20} />,
-  Photo: <ImageIcon size={20} />,
-  Share: <Share2 size={20} />,
-  Delete: <Trash2 size={20} />,
-  Download: <Download size={20} />,
-  Check: <CheckCircle size={20} />,
-  CheckSmall: <Check size={16} />,
-  View: <Eye size={20} />,
-  Plus: <Plus size={20} />,
-  Back: <ArrowLeft size={20} />,
-  Search: <Search size={20} />
+  Dashboard: safeIcon('LayoutDashboard'),
+  Albums: safeIcon('Camera'),
+  Clients: safeIcon('Users'),
+  Orders: safeIcon('ShoppingBag'),
+  Config: safeIcon('Settings'),
+  Logout: safeIcon('LogOut'),
+  Photo: safeIcon('Image'),
+  Share: safeIcon('Share2'),
+  Delete: safeIcon('Trash2'),
+  Download: safeIcon('Download'),
+  Check: safeIcon('CheckCircle'),
+  CheckSmall: safeIcon('Check', 16),
+  View: safeIcon('Eye'),
+  Plus: safeIcon('Plus'),
+  Back: safeIcon('ArrowLeft'),
+  Search: safeIcon('Search')
 };
