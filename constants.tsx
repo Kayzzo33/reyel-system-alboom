@@ -2,14 +2,16 @@
 import React from 'react';
 import * as LucideIcons from 'lucide-react';
 
-// Função de segurança para garantir que o ícone existe antes de tentar renderizar
-const safeIcon = (iconName: keyof typeof LucideIcons, size = 20) => {
-  const IconComponent = LucideIcons[iconName] as any;
-  if (!IconComponent) {
-    // Retorna um fallback visual caso o ícone falhe
-    return <div style={{ width: size, height: size, border: '1px solid currentColor', opacity: 0.5, borderRadius: '4px' }} />;
+const safeIcon = (iconName: string, size = 20) => {
+  try {
+    const IconComponent = (LucideIcons as any)[iconName];
+    if (!IconComponent) {
+      return <div style={{ width: size, height: size, background: 'rgba(255,255,255,0.05)', borderRadius: '4px' }} />;
+    }
+    return <IconComponent size={size} />;
+  } catch (e) {
+    return <div style={{ width: size, height: size, background: 'rgba(255,255,255,0.05)', borderRadius: '4px' }} />;
   }
-  return <IconComponent size={size} />;
 };
 
 export const COLORS = {

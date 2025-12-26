@@ -32,6 +32,8 @@ export interface Album {
   data_evento: string;
   created_at: string;
   photo_count?: number;
+  // Added to support Supabase joined count results (e.g. .select('*, photos(count)'))
+  photos?: { count: number }[];
 }
 
 export interface Photo {
