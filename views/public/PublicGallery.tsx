@@ -159,7 +159,6 @@ const PublicGallery: React.FC = () => {
     e.stopPropagation();
     try {
       setDownloading(photo.id);
-      // Adicionamos um timestamp aleatório para evitar que o navegador use uma versão em cache que pode ignorar headers de anexo
       const url = `${R2_CONFIG.publicUrl}/${photo.r2_key_original}?t=${Date.now()}`;
       
       const response = await fetch(url, { 
@@ -174,7 +173,6 @@ const PublicGallery: React.FC = () => {
       
       const link = document.createElement('a');
       link.href = blobUrl;
-      // Forçamos o nome do arquivo para garantir que o navegador entenda como download
       link.download = photo.filename || `foto-reyel-${photo.id}.jpg`;
       document.body.appendChild(link);
       link.click();
@@ -183,7 +181,6 @@ const PublicGallery: React.FC = () => {
       setTimeout(() => window.URL.revokeObjectURL(blobUrl), 100);
     } catch (err) {
       console.warn("CORS/Fetch error. Fallback para nova guia:", err);
-      // Se o CORS no R2 não estiver 100%, ele cai aqui
       const url = `${R2_CONFIG.publicUrl}/${photo.r2_key_original}`;
       window.open(url, '_blank');
     } finally {
@@ -223,8 +220,8 @@ const PublicGallery: React.FC = () => {
            
            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-8">
               {selectedPhotoList.map(photo => (
-                <div key={photo.id} className="relative aspect-square rounded-2xl md:rounded-[2rem] overflow-hidden group border border-white/5 shadow-2xl bg-slate-900">
-                   <img src={`${R2_CONFIG.publicUrl}/${photo.r2_key_thumbnail}`} className="w-full h-full object-cover" alt="" />
+                <div key={photo.id} className="relative aspect-square rounded-2xl md:rounded-[2rem] overflow-hidden group border border-white/5 shadow-2xl bg-slate-900" style={{ contentVisibility: 'auto', containIntrinsicSize: '250px' }}>
+                   <img src={`${R2_CONFIG.publicUrl}/${photo.r2_key_thumbnail}`} className="w-full h-full object-cover will-change-transform" alt="" loading="lazy" decoding="async" />
                    
                    {paymentStatus === 'pago' ? (
                      <button 
@@ -289,9 +286,15 @@ const PublicGallery: React.FC = () => {
           <div 
             key={photo.id} 
             className="relative aspect-[3/4] bg-slate-900 rounded-2xl md:rounded-[3rem] overflow-hidden cursor-pointer group shadow-xl ring-1 ring-white/5 transition-all" 
+            style={{ contentVisibility: 'auto', containIntrinsicSize: '300px' }}
             onClick={() => setViewingPhoto(photo)}
           >
-             <img src={`${R2_CONFIG.publicUrl}/${photo.r2_key_thumbnail}`} className="w-full h-full object-cover" loading="lazy" />
+             <img 
+              src={`${R2_CONFIG.publicUrl}/${photo.r2_key_thumbnail}`} 
+              className="w-full h-full object-cover will-change-transform" 
+              loading="lazy" 
+              decoding="async"
+             />
              
              <div className="absolute top-3 right-3 md:top-6 md:right-6 z-40" onClick={(e) => { 
                e.stopPropagation(); 
@@ -339,7 +342,11 @@ const PublicGallery: React.FC = () => {
         <div className="fixed inset-0 z-[110] bg-black/99 backdrop-blur-3xl flex flex-col items-center justify-center p-4 md:p-6 animate-in fade-in duration-500">
           <button className="absolute top-6 right-6 md:top-12 md:right-12 p-4 text-white/30 hover:text-white transition-all uppercase font-black text-[9px] md:text-[10px] tracking-widest" onClick={() => setViewingPhoto(null)}>Fechar</button>
           <div className="relative max-h-[70vh] md:max-h-[80vh] rounded-2xl md:rounded-[2.5rem] overflow-hidden border border-white/5 shadow-3xl">
-            <img src={`${R2_CONFIG.publicUrl}/${viewingPhoto.r2_key_original}`} className="max-h-[70vh] md:max-h-[80vh] object-contain pointer-events-none" />
+            <img 
+              src={`${R2_CONFIG.publicUrl}/${viewingPhoto.r2_key_original}`} 
+              className="max-h-[70vh] md:max-h-[80vh] object-contain pointer-events-none will-change-transform" 
+              decoding="async"
+            />
             <div className="absolute inset-0 flex items-center justify-center opacity-40 p-12 md:p-20 rotate-[-15deg] grayscale contrast-200 pointer-events-none">
               {photographer?.marca_dagua_url ? <img src={photographer.marca_dagua_url} className="w-full h-full object-contain" /> : <span className="text-white/10 font-black text-4xl md:text-8xl text-center">REYEL PROTEGIDO</span>}
             </div>

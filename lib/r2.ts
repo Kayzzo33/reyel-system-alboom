@@ -1,5 +1,4 @@
 
-// Usamos aws4fetch: uma biblioteca leve que faz o mesmo que o SDK, mas sem tentar acessar o disco rígido.
 import { AwsClient } from "https://esm.sh/aws4fetch@1.0.20";
 
 const getEnv = (key: string, fallback: string): string => {
@@ -18,14 +17,6 @@ export const R2_CONFIG = {
   publicUrl: getEnv('VITE_R2_PUBLIC_URL', 'https://pub-9082650379b84bf7a848577262e60686.r2.dev') 
 };
 
-export interface UploadProgress {
-  fileName: string;
-  progress: number;
-  status: 'pending' | 'uploading' | 'completed' | 'error';
-  url?: string;
-}
-
-// Inicializamos o cliente de forma estática e segura para o browser
 const r2Client = new AwsClient({
   accessKeyId: R2_CONFIG.accessKeyId,
   secretAccessKey: R2_CONFIG.secretAccessKey,
@@ -33,39 +24,80 @@ const r2Client = new AwsClient({
   region: 'auto',
 });
 
+// Gera uma miniatura WebP otimizada antes do upload
+async function createThumbnail(file: File, maxWidth = 600): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const scale = maxWidth / img.width;
+        canvas.width = maxWidth;
+        canvas.height = img.height * scale;
+        
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return reject(new Error("Canvas context error"));
+        
+        // Melhorar qualidade do redimensionamento
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        
+        canvas.toBlob((blob) => {
+          if (blob) resolve(blob);
+          else reject(new Error("Blob conversion error"));
+        }, 'image/webp', 0.8); // Qualidade 80% em WebP é excelente
+      };
+      img.onerror = reject;
+    };
+    reader.onerror = reject;
+  });
+}
+
+export async function uploadPhotoWithThumbnail(
+  file: File, 
+  albumId: string,
+  onProgress: (step: string) => void
+): Promise<{ originalKey: string, thumbKey: string }> {
+  const timestamp = Date.now();
+  const safeName = file.name.replace(/\s+/g, '_');
+  
+  const originalKey = `albums/${albumId}/originals/${timestamp}-${safeName}`;
+  const thumbKey = `albums/${albumId}/thumbs/${timestamp}-${safeName}.webp`;
+
+  // 1. Upload Original
+  onProgress('Original...');
+  const originalUrl = `https://${R2_CONFIG.accountId}.r2.cloudflarestorage.com/${R2_CONFIG.bucketName}/${originalKey}`;
+  await r2Client.fetch(originalUrl, {
+    method: 'PUT',
+    body: file,
+    headers: { 'Content-Type': file.type }
+  });
+
+  // 2. Gerar e Upload Thumbnail
+  onProgress('Miniatura...');
+  const thumbBlob = await createThumbnail(file);
+  const thumbUrl = `https://${R2_CONFIG.accountId}.r2.cloudflarestorage.com/${R2_CONFIG.bucketName}/${thumbKey}`;
+  await r2Client.fetch(thumbUrl, {
+    method: 'PUT',
+    body: thumbBlob,
+    headers: { 'Content-Type': 'image/webp' }
+  });
+
+  return { originalKey, thumbKey };
+}
+
+// Mantendo para compatibilidade caso necessário, mas agora usamos a de cima
 export async function uploadPhotoToR2(
   file: File, 
   albumId: string, 
   onProgress: (p: number) => void
 ): Promise<{ url: string; key: string }> {
-  try {
-    const key = `albums/${albumId}/originals/${Date.now()}-${file.name.replace(/\s+/g, '_')}`;
-    const uploadUrl = `https://${R2_CONFIG.accountId}.r2.cloudflarestorage.com/${R2_CONFIG.bucketName}/${key}`;
-    
-    onProgress(10);
-
-    // O aws4fetch assina a requisição usando Web Crypto (nativo do browser)
-    // Isso NÃO usa o sistema de arquivos e NÃO causa erro de unenv
-    const response = await r2Client.fetch(uploadUrl, {
-      method: 'PUT',
-      body: file,
-      headers: {
-        'Content-Type': file.type,
-      },
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('R2 Response Error:', errorText);
-      throw new Error(`Erro no R2: ${response.statusText}`);
-    }
-
-    onProgress(100);
-    
-    const publicUrl = `${R2_CONFIG.publicUrl}/${key}`;
-    return { url: publicUrl, key };
-  } catch (error: any) {
-    console.error('Falha Crítica no Upload:', error);
-    throw new Error("Erro de conexão com o Storage. Verifique se o CORS no Cloudflare está configurado para permitir o seu domínio.");
-  }
+  const { originalKey } = await uploadPhotoWithThumbnail(file, albumId, () => onProgress(50));
+  onProgress(100);
+  return { url: `${R2_CONFIG.publicUrl}/${originalKey}`, key: originalKey };
 }

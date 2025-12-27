@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
-import { uploadPhotoToR2, UploadProgress, R2_CONFIG } from '../../lib/r2';
+import { uploadPhotoWithThumbnail, R2_CONFIG } from '../../lib/r2';
 import { ICONS, COLORS } from '../../constants';
 import Button from '../../components/ui/Button';
 import { Album, Client, Photo, Profile } from '../../types';
@@ -16,6 +16,7 @@ const Albums: React.FC<{ initialOpenModal?: boolean; onModalClose?: () => void }
   const [selectedAlbum, setSelectedAlbum] = useState<Album | null>(null);
   const [albumPhotos, setAlbumPhotos] = useState<Photo[]>([]);
   const [loadingPhotos, setLoadingPhotos] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<string | null>(null);
   const [isCopied, setIsCopied] = useState(false);
 
   const [newAlbum, setNewAlbum] = useState({
@@ -104,20 +105,28 @@ const Albums: React.FC<{ initialOpenModal?: boolean; onModalClose?: () => void }
     const albumId = createdAlbumId || selectedAlbum?.id;
     if (!albumId) return;
 
-    for (const file of files) {
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
       try {
-        const { key } = await uploadPhotoToR2(file, albumId, () => {});
+        setUploadStatus(`Processando ${i + 1}/${files.length}...`);
+        const { originalKey, thumbKey } = await uploadPhotoWithThumbnail(file, albumId, (step) => {
+          setUploadStatus(`[${i + 1}/${files.length}] Enviando ${step}`);
+        });
+
         await supabase.from('photos').insert([{
           album_id: albumId,
-          r2_key_original: key,
-          r2_key_thumbnail: key,
+          r2_key_original: originalKey,
+          r2_key_thumbnail: thumbKey,
           filename: file.name,
           tamanho_bytes: file.size,
-          ordem: 0
+          ordem: i
         }]);
-      } catch (err) { console.error("Erro upload:", file.name); }
+      } catch (err) { 
+        console.error("Erro upload:", file.name, err); 
+      }
     }
     
+    setUploadStatus(null);
     if (selectedAlbum) handleManageAlbum(selectedAlbum);
     fetchAlbums();
   };
@@ -166,12 +175,24 @@ const Albums: React.FC<{ initialOpenModal?: boolean; onModalClose?: () => void }
           </div>
         </header>
 
+        {uploadStatus && (
+          <div className="bg-[#d4af37]/10 border border-[#d4af37]/20 p-4 rounded-2xl flex items-center gap-4 animate-pulse">
+            <div className="w-4 h-4 border-2 border-[#d4af37] border-t-transparent rounded-full animate-spin"></div>
+            <span className="text-[10px] font-black uppercase tracking-widest text-[#d4af37]">{uploadStatus}</span>
+          </div>
+        )}
+
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 md:gap-6">
           {loadingPhotos ? (
             [1, 2, 3, 4].map(i => <div key={i} className="aspect-square bg-slate-900 rounded-2xl md:rounded-3xl animate-pulse"></div>)
           ) : albumPhotos.map((photo) => (
-            <div key={photo.id} className="group relative aspect-square bg-slate-900 rounded-2xl md:rounded-3xl overflow-hidden border border-white/5 shadow-lg">
-              <img src={`${R2_CONFIG.publicUrl}/${photo.r2_key_thumbnail}`} className="w-full h-full object-cover" />
+            <div key={photo.id} className="group relative aspect-square bg-slate-900 rounded-2xl md:rounded-3xl overflow-hidden border border-white/5 shadow-lg" style={{ contentVisibility: 'auto', containIntrinsicSize: '200px' }}>
+              <img 
+                src={`${R2_CONFIG.publicUrl}/${photo.r2_key_thumbnail}`} 
+                className="w-full h-full object-cover will-change-transform" 
+                loading="lazy"
+                decoding="async"
+              />
             </div>
           ))}
         </div>
@@ -234,6 +255,11 @@ const Albums: React.FC<{ initialOpenModal?: boolean; onModalClose?: () => void }
               </div>
             ) : (
               <div className="space-y-8 text-center">
+                 {uploadStatus && (
+                    <div className="p-8 bg-black/40 border border-white/5 rounded-3xl animate-pulse">
+                      <p className="text-[#d4af37] font-black text-xs uppercase tracking-[0.3rem]">{uploadStatus}</p>
+                    </div>
+                 )}
                  <div className="aspect-video bg-black border-2 border-dashed border-white/10 rounded-[2rem] md:rounded-[3rem] flex flex-col items-center justify-center cursor-pointer hover:border-[#d4af37]/30 transition-all" onClick={() => fileInputRef.current?.click()}>
                     <div className="w-16 h-16 md:w-20 md:h-20 bg-[#d4af37]/10 text-[#d4af37] rounded-2xl md:rounded-[2rem] flex items-center justify-center mb-6">{ICONS.Plus}</div>
                     <p className="text-white font-black text-lg md:text-xl tracking-tighter">Subir as fotos</p>
