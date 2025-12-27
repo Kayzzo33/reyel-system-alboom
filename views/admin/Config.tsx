@@ -75,10 +75,11 @@ const Config: React.FC = () => {
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="bg-[#0a0a0a] border border-white/5 rounded-[3rem] p-10 space-y-10 shadow-2xl">
+        <div className="bg-[#0a0a0a] border border-white/5 rounded-[3rem] p-10 space-y-12 shadow-2xl">
           <h3 className="text-xl font-black text-white uppercase tracking-tight">Identidade Visual</h3>
           
-          <div className="grid gap-10">
+          <div className="space-y-10">
+            {/* LOGO */}
             <div className="flex items-center gap-8 group">
               <div className="w-24 h-24 bg-black rounded-3xl border border-white/5 flex items-center justify-center overflow-hidden relative">
                 {profile?.logo_url ? <img src={profile.logo_url} className="w-full h-full object-contain p-4" /> : <span className="text-slate-800 font-black">LOGO</span>}
@@ -90,6 +91,21 @@ const Config: React.FC = () => {
                 <h4 className="font-bold text-white uppercase text-[10px] tracking-widest text-slate-500">Logo do Estúdio</h4>
                 <input type="file" hidden ref={logoInputRef} onChange={(e) => handleFileUpload(e, 'logo')} />
                 <Button variant="ghost" size="sm" className="rounded-xl border border-white/5" onClick={() => logoInputRef.current?.click()}>Subir Imagem</Button>
+              </div>
+            </div>
+
+            {/* MARCA D'AGUA */}
+            <div className="flex items-center gap-8 group">
+              <div className="w-24 h-24 bg-black rounded-3xl border border-white/5 flex items-center justify-center overflow-hidden relative">
+                {profile?.marca_dagua_url ? <img src={profile.marca_dagua_url} className="w-full h-full object-contain p-4 opacity-50" /> : <span className="text-slate-800 font-black">MARK</span>}
+                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                   <button className="text-[10px] font-black text-red-600 uppercase" onClick={() => watermarkInputRef.current?.click()}>Alterar</button>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <h4 className="font-bold text-white uppercase text-[10px] tracking-widest text-slate-500">Marca d'água (PNG)</h4>
+                <input type="file" hidden ref={watermarkInputRef} onChange={(e) => handleFileUpload(e, 'watermark')} />
+                <Button variant="ghost" size="sm" className="rounded-xl border border-white/5" onClick={() => watermarkInputRef.current?.click()}>Subir Imagem</Button>
               </div>
             </div>
           </div>

@@ -133,12 +133,17 @@ const Orders: React.FC = () => {
       </header>
 
       <div className="grid gap-4 md:gap-6">
-        {filteredOrders.map((order) => {
-          const isExpanded = expandedOrder === `${order.album_id}-${order.client_id}`;
+        {filteredOrders.length === 0 ? (
+          <div className="bg-[#0a0a0a] border border-white/5 p-20 rounded-[3rem] text-center">
+             <p className="text-slate-600 font-black uppercase tracking-widest text-xs">Nenhum pedido nesta categoria.</p>
+          </div>
+        ) : filteredOrders.map((order) => {
+          const key = `${order.album_id}-${order.client_id}`;
+          const isExpanded = expandedOrder === key;
           const currentPrice = profile?.default_price_per_photo || order.preco_por_foto;
           
           return (
-            <div key={`${order.album_id}-${order.client_id}`} className={`bg-[#0a0a0a] border border-white/5 rounded-[2rem] md:rounded-[3rem] overflow-hidden transition-all duration-500 ${isExpanded ? 'ring-1 ring-red-600/30 shadow-3xl' : 'hover:border-white/10'}`}>
+            <div key={key} className={`bg-[#0a0a0a] border border-white/5 rounded-[2rem] md:rounded-[3rem] overflow-hidden transition-all duration-500 ${isExpanded ? 'ring-1 ring-red-600/30 shadow-3xl' : 'hover:border-white/10'}`}>
                 <div className="p-6 md:p-10 flex flex-col md:flex-row items-center justify-between gap-6 md:gap-8">
                   <div className="flex items-center gap-4 md:gap-6 w-full md:w-auto">
                     <div className="w-12 h-12 md:w-16 md:h-16 bg-emerald-500/10 text-emerald-500 rounded-xl md:rounded-2xl flex items-center justify-center font-black text-lg md:text-xl shadow-inner border border-emerald-500/10">{order.photo_count}</div>
@@ -153,11 +158,41 @@ const Orders: React.FC = () => {
                        <p className="text-[8px] md:text-[9px] text-slate-600 uppercase font-black tracking-widest">R$ {currentPrice.toFixed(2)}/foto</p>
                     </div>
                     <div className="flex gap-2 md:gap-3">
-                       <button onClick={() => setExpandedOrder(isExpanded ? null : `${order.album_id}-${order.client_id}`)} className={`p-3 md:p-4 rounded-xl transition-all ${isExpanded ? 'bg-red-600 text-white' : 'bg-white/5 text-slate-500 hover:text-white'}`}>{ICONS.View}</button>
+                       <button onClick={() => setExpandedOrder(isExpanded ? null : key)} className={`p-3 md:p-4 rounded-xl transition-all ${isExpanded ? 'bg-red-600 text-white' : 'bg-white/5 text-slate-500 hover:text-white'}`}>{ICONS.View}</button>
                        <button onClick={() => openWhatsApp(order)} className="p-3 md:p-4 bg-emerald-500/10 text-emerald-500 rounded-xl hover:bg-emerald-500 hover:text-white transition-all">{ICONS.Orders}</button>
                     </div>
                   </div>
                 </div>
+
+                {isExpanded && (
+                  <div className="border-t border-white/5 bg-black/40 p-6 md:p-10 animate-in slide-in-from-top duration-300">
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
+                       <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Fotos Selecionadas ({order.photo_count})</h4>
+                       <div className="flex gap-2">
+                          <Button 
+                            variant={order.status === 'pago' ? 'ghost' : 'primary'} 
+                            size="sm" 
+                            className="rounded-xl px-6"
+                            onClick={() => handleUpdateStatus(order, order.status === 'pago' ? 'pendente' : 'pago')}
+                          >
+                            {order.status === 'pago' ? 'Reverter para Pendente' : 'Marcar como Pago'}
+                          </Button>
+                       </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-8 gap-4">
+                      {order.photos.map((photo: any) => (
+                        <div key={photo.id} className="aspect-square rounded-xl overflow-hidden border border-white/5 bg-[#0a0a0a]">
+                          <img 
+                            src={`${R2_CONFIG.publicUrl}/${photo.r2_key_thumbnail}`} 
+                            className="w-full h-full object-cover" 
+                            loading="lazy"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
             </div>
           );
         })}
