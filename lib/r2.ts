@@ -1,6 +1,6 @@
 
-// Importando o SDK com flag específica para browser para evitar poluição de unenv/fs
-import { S3Client, PutObjectCommand } from "https://esm.sh/@aws-sdk/client-s3@3.540.0?target=browser";
+// Importando o cliente principal e o comando
+import { S3Client, PutObjectCommand } from "https://esm.sh/@aws-sdk/client-s3@3.540.0";
 
 const getEnv = (key: string, fallback: string): string => {
   try {
@@ -34,7 +34,7 @@ export async function uploadPhotoToR2(
     const key = `albums/${albumId}/originals/${Date.now()}-${file.name.replace(/\s+/g, '_')}`;
     onProgress(10);
 
-    // CRITICAL FIX: Explicitamente desabilita a busca por credenciais no sistema de arquivos
+    // CRITICAL: Forçamos o SDK a ignorar qualquer arquivo de configuração local
     const s3 = new S3Client({
       region: "auto",
       endpoint: `https://${R2_CONFIG.accountId}.r2.cloudflarestorage.com`,
@@ -42,11 +42,13 @@ export async function uploadPhotoToR2(
         accessKeyId: R2_CONFIG.accessKeyId,
         secretAccessKey: R2_CONFIG.secretAccessKey,
       },
-      // Impede o SDK de tentar ler arquivos locais (Node.js fallback)
-      defaultsMode: "standard"
+      // Desativa explicitamente a detecção de ambiente Node/FS
+      customUserAgent: "reyel-browser-client",
+      forcePathStyle: true
     });
 
     const arrayBuffer = await file.arrayBuffer();
+    
     const command = new PutObjectCommand({
       Bucket: R2_CONFIG.bucketName,
       Key: key,
@@ -61,9 +63,9 @@ export async function uploadPhotoToR2(
     return { url, key };
   } catch (error: any) {
     console.error('R2 Upload Error:', error);
-    // Se o erro ainda for fs.readFile, lançamos um erro mais descritivo
+    // Erro amigável se o ambiente ainda tentar carregar fs
     if (error.message?.includes('fs.readFile')) {
-       throw new Error("Conflito de ambiente: O SDK tentou acessar o disco rígido. Use um navegador moderno.");
+       throw new Error("Erro de Inicialização do SDK: O navegador tentou carregar módulos de servidor. Verifique se as extensões do navegador não estão bloqueando o script.");
     }
     throw error;
   }

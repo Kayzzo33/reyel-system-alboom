@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
-// Import R2_CONFIG to be used in the image source paths
+// Certifique-se de importar R2_CONFIG
 import { uploadPhotoToR2, UploadProgress, R2_CONFIG } from '../../lib/r2';
 import { ICONS, COLORS } from '../../constants';
 import Button from '../../components/ui/Button';
@@ -74,11 +74,12 @@ const Albums: React.FC<AlbumsProps> = ({ initialOpenModal, onModalClose }) => {
     setSelectedAlbum(album);
     setLoadingPhotos(true);
     try {
+      // Temporariamente removemos o order by created_at para evitar erro 400 antes do SQL ser rodado
       const { data, error } = await supabase
         .from('photos')
         .select('*')
-        .eq('album_id', album.id)
-        .order('created_at', { ascending: true });
+        .eq('album_id', album.id);
+        
       if (error) throw error;
       setAlbumPhotos(data || []);
     } catch (err) {
@@ -119,7 +120,7 @@ const Albums: React.FC<AlbumsProps> = ({ initialOpenModal, onModalClose }) => {
         data_evento: newAlbum.data_evento,
         photographer_id: user.id,
         share_token: Math.random().toString(36).substring(2, 10),
-        client_id: newAlbum.client_id || null, // Garante NULL se estiver vazio
+        client_id: newAlbum.client_id || null,
         ativo: true,
         permite_download: false
       };
