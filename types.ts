@@ -6,6 +6,7 @@ export interface Profile {
   telefone?: string;
   logo_url?: string;
   marca_dagua_url?: string;
+  default_price_per_photo?: number;
 }
 
 export interface Client {
@@ -59,7 +60,6 @@ export interface Selection {
   photo?: Photo;
 }
 
-// Add OrderStatus and Order to resolve import errors in mockData.ts
 export enum OrderStatus {
   PENDING = 'pendente',
   PAID = 'pago',
