@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { R2_CONFIG } from '../../lib/r2';
-import { Album, Photo, Client } from '../../types';
+import { Album, Photo, Client, Profile } from '../../types';
 import { ICONS, COLORS } from '../../constants';
 import Button from '../../components/ui/Button';
 
@@ -24,14 +24,17 @@ const useClientSession = (albumId: string) => {
 
 const PublicGallery: React.FC = () => {
   const [album, setAlbum] = useState<Album | null>(null);
+  const [photographer, setPhotographer] = useState<Profile | null>(null);
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [selectedPhotos, setSelectedPhotos] = useState<Set<string>>(new Set());
   const [viewingPhoto, setViewingPhoto] = useState<Photo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isFinishing, setIsFinishing] = useState(false);
+  const [isFinished, setIsFinished] = useState(false);
   
   // Identificação do Cliente
   const [showIdentModal, setShowIdentModal] = useState(false);
-  const [clientForm, setClientForm] = useState({ nome: '', whatsapp: '' });
+  const [clientForm, setClientForm] = useState({ nome: '', email: '', whatsapp: '' });
   const [identifying, setIdentifying] = useState(false);
 
   // Extrair share_token da URL ou do parâmetro ?gallery=
@@ -49,7 +52,6 @@ const PublicGallery: React.FC = () => {
   const fetchAlbum = async () => {
     try {
       setLoading(true);
-      // Busca álbum pelo share_token
       const { data, error } = await supabase
         .from('albums')
         .select('*, photos(*)')
@@ -59,6 +61,11 @@ const PublicGallery: React.FC = () => {
       if (error) throw error;
       setAlbum(data);
       setPhotos(data.photos || []);
+
+      // Busca perfil do fotógrafo para logo e marca d'água
+      const { data: prof } = await supabase.from('profiles').select('*').eq('id', data.photographer_id).single();
+      setPhotographer(prof);
+
     } catch (err) {
       console.error("Erro ao carregar galeria:", err);
     } finally {
@@ -67,18 +74,19 @@ const PublicGallery: React.FC = () => {
   };
 
   const handleIdentification = async () => {
-    if (!clientForm.nome || !clientForm.whatsapp) {
-      alert("Por favor, preencha seu nome e WhatsApp para continuar.");
+    if (!clientForm.nome || !clientForm.whatsapp || !clientForm.email) {
+      alert("Por favor, preencha todos os campos para continuar.");
       return;
     }
 
     try {
       setIdentifying(true);
       
+      // Busca cliente por WhatsApp OU E-mail para evitar duplicatas
       let { data: existingClient } = await supabase
         .from('clients')
         .select('*')
-        .eq('whatsapp', clientForm.whatsapp)
+        .or(`whatsapp.eq.${clientForm.whatsapp},email.eq.${clientForm.email}`)
         .maybeSingle();
 
       let finalClient = existingClient;
@@ -89,7 +97,7 @@ const PublicGallery: React.FC = () => {
           .insert([{
             nome: clientForm.nome,
             whatsapp: clientForm.whatsapp,
-            email: `${clientForm.whatsapp}@cliente.com`,
+            email: clientForm.email,
             photographer_id: album.photographer_id
           }])
           .select()
@@ -97,6 +105,9 @@ const PublicGallery: React.FC = () => {
         
         if (createError) throw createError;
         finalClient = newClient;
+      } else if (existingClient) {
+        // Atualiza o nome se o cliente já existia mas mudou
+        await supabase.from('clients').update({ nome: clientForm.nome }).eq('id', existingClient.id);
       }
 
       if (finalClient) {
@@ -108,6 +119,44 @@ const PublicGallery: React.FC = () => {
       alert("Houve um problema ao processar seu acesso. Tente novamente.");
     } finally {
       setIdentifying(false);
+    }
+  };
+
+  const handleFinishSelection = async () => {
+    if (!client) {
+      setShowIdentModal(true);
+      return;
+    }
+
+    if (selectedPhotos.size === 0) {
+      alert("Selecione pelo menos uma foto para finalizar.");
+      return;
+    }
+
+    if (!confirm(`Deseja finalizar a seleção de ${selectedPhotos.size} fotos?`)) return;
+
+    try {
+      setIsFinishing(true);
+      
+      const selectionPayload = Array.from(selectedPhotos).map(photoId => ({
+        album_id: album?.id,
+        client_id: client.id,
+        photo_id: photoId
+      }));
+
+      // Primeiro limpa seleções anteriores deste cliente para este álbum (caso ele esteja re-fazendo)
+      await supabase.from('selections').delete().eq('album_id', album?.id).eq('client_id', client.id);
+
+      // Insere as novas seleções
+      const { error } = await supabase.from('selections').insert(selectionPayload);
+      if (error) throw error;
+
+      setIsFinished(true);
+    } catch (err) {
+      console.error("Erro ao finalizar seleção:", err);
+      alert("Erro ao salvar sua seleção. Tente novamente.");
+    } finally {
+      setIsFinishing(false);
     }
   };
 
@@ -144,6 +193,21 @@ const PublicGallery: React.FC = () => {
     </div>
   );
 
+  if (isFinished) return (
+    <div className="min-h-screen bg-[#020617] flex flex-col items-center justify-center text-center p-8 animate-in fade-in zoom-in duration-500">
+      <div className="w-24 h-24 bg-emerald-500/20 text-emerald-500 rounded-[2.5rem] flex items-center justify-center mb-8 border border-emerald-500/20 shadow-2xl shadow-emerald-500/10">
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+        </svg>
+      </div>
+      <h2 className="text-4xl font-black text-white tracking-tighter mb-4">Seleção Finalizada!</h2>
+      <p className="text-slate-400 max-w-sm font-medium leading-relaxed">
+        Obrigado, <span className="text-white font-bold">{client?.nome}</span>! Suas fotos foram enviadas com sucesso para análise do fotógrafo.
+      </p>
+      <Button variant="outline" className="mt-10 rounded-2xl border-white/10" onClick={() => setIsFinished(false)}>Revisar fotos</Button>
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-[#020617] text-slate-100 pb-24 selection:bg-[#d4af37]/30">
       {/* Header Público */}
@@ -151,7 +215,11 @@ const PublicGallery: React.FC = () => {
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-5">
             <div className="w-12 h-12 bg-slate-900 border border-white/10 rounded-2xl flex items-center justify-center overflow-hidden">
-               <span className="text-[#d4af37] font-black text-xl">R</span>
+               {photographer?.logo_url ? (
+                 <img src={photographer.logo_url} className="w-full h-full object-contain p-2" />
+               ) : (
+                 <span className="text-[#d4af37] font-black text-xl">R</span>
+               )}
             </div>
             <div>
               <h1 className="text-lg font-bold tracking-tight text-white">{album.nome_galeria}</h1>
@@ -169,7 +237,13 @@ const PublicGallery: React.FC = () => {
                 <span className="text-xs font-bold text-slate-500">{album.max_selecoes}</span>
               </div>
             </div>
-            <Button variant="primary" size="sm" className="font-bold px-6 py-2.5 rounded-xl shadow-lg shadow-[#d4af37]/10">
+            <Button 
+              variant="primary" 
+              size="sm" 
+              className="font-bold px-6 py-2.5 rounded-xl shadow-lg shadow-[#d4af37]/10"
+              isLoading={isFinishing}
+              onClick={handleFinishSelection}
+            >
               Finalizar Seleção
             </Button>
           </div>
@@ -208,8 +282,16 @@ const PublicGallery: React.FC = () => {
                 </div>
               </div>
 
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.07] rotate-[-30deg] select-none">
-                <span className="text-4xl font-black tracking-[1rem] uppercase text-white">ReyelProduções</span>
+              {/* Marca d'Água Dinâmica */}
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none overflow-hidden p-8">
+                {photographer?.marca_dagua_url ? (
+                  <img 
+                    src={photographer.marca_dagua_url} 
+                    className="w-full h-full object-contain opacity-20 filter grayscale contrast-150 rotate-[-15deg]"
+                  />
+                ) : (
+                   <span className="text-4xl font-black tracking-[1rem] uppercase text-white/5 rotate-[-30deg]">ReyelProduções</span>
+                )}
               </div>
 
               <div className="absolute inset-x-0 bottom-0 p-6 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
@@ -227,8 +309,8 @@ const PublicGallery: React.FC = () => {
               {ICONS.Clients}
             </div>
             <div>
-              <h3 className="text-2xl font-black text-white tracking-tight">Bem-vindo(a)</h3>
-              <p className="text-slate-400 text-sm mt-2 font-medium">Identifique-se para começar a selecionar suas fotos favoritas.</p>
+              <h3 className="text-2xl font-black text-white tracking-tight">Identifique-se</h3>
+              <p className="text-slate-400 text-sm mt-2 font-medium">Preencha seus dados para salvar sua seleção.</p>
             </div>
             <div className="space-y-4">
               <input 
@@ -239,8 +321,15 @@ const PublicGallery: React.FC = () => {
                 onChange={(e) => setClientForm({...clientForm, nome: e.target.value})}
               />
               <input 
+                type="email" 
+                placeholder="Seu Melhor E-mail"
+                className="w-full bg-slate-950 border border-white/5 rounded-2xl px-6 py-4 text-white focus:outline-none focus:ring-2 focus:ring-[#d4af37]/40 text-center font-bold"
+                value={clientForm.email}
+                onChange={(e) => setClientForm({...clientForm, email: e.target.value})}
+              />
+              <input 
                 type="text" 
-                placeholder="Seu WhatsApp"
+                placeholder="WhatsApp (00) 00000-0000"
                 className="w-full bg-slate-950 border border-white/5 rounded-2xl px-6 py-4 text-white focus:outline-none focus:ring-2 focus:ring-[#d4af37]/40 text-center font-bold"
                 value={clientForm.whatsapp}
                 onChange={(e) => setClientForm({...clientForm, whatsapp: e.target.value})}
@@ -250,7 +339,7 @@ const PublicGallery: React.FC = () => {
               <Button variant="primary" className="w-full py-4 rounded-2xl font-black uppercase tracking-widest text-xs" isLoading={identifying} onClick={handleIdentification}>
                 Acessar Galeria
               </Button>
-              <button className="text-slate-600 text-[10px] font-bold hover:text-slate-400 transition-colors" onClick={() => setShowIdentModal(false)}>Apenas visualizar por enquanto</button>
+              <button className="text-slate-600 text-[10px] font-bold hover:text-slate-400 transition-colors" onClick={() => setShowIdentModal(false)}>Apenas visualizar</button>
             </div>
           </div>
         </div>
@@ -267,11 +356,25 @@ const PublicGallery: React.FC = () => {
             </svg>
           </button>
 
-          <img 
-            src={`${R2_CONFIG.publicUrl}/${viewingPhoto.r2_key_original}`} 
-            alt={viewingPhoto.filename}
-            className="max-h-[80vh] max-w-full object-contain shadow-[0_0_80px_rgba(0,0,0,0.5)] rounded-lg animate-in zoom-in-95 duration-500"
-          />
+          <div className="relative group max-h-[80vh] max-w-full overflow-hidden">
+            <img 
+              src={`${R2_CONFIG.publicUrl}/${viewingPhoto.r2_key_original}`} 
+              alt={viewingPhoto.filename}
+              className="max-h-[80vh] max-w-full object-contain shadow-[0_0_80px_rgba(0,0,0,0.5)] rounded-lg animate-in zoom-in-95 duration-500"
+            />
+            
+            {/* Marca d'Água no Modal */}
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none p-12 overflow-hidden">
+              {photographer?.marca_dagua_url ? (
+                <img 
+                  src={photographer.marca_dagua_url} 
+                  className="w-1/2 h-1/2 object-contain opacity-15 filter grayscale contrast-150 rotate-[-15deg]"
+                />
+              ) : (
+                <span className="text-6xl font-black tracking-[2rem] uppercase text-white/5 rotate-[-30deg]">ReyelProduções</span>
+              )}
+            </div>
+          </div>
 
           <div className="mt-12 flex items-center gap-6">
              <Button 

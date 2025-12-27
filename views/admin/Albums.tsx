@@ -99,6 +99,21 @@ const Albums: React.FC<AlbumsProps> = ({ initialOpenModal, onModalClose }) => {
     });
   };
 
+  const handleDeleteAlbum = async (albumId: string) => {
+    if (!confirm("⚠️ ATENÇÃO: Isso excluirá permanentemente o álbum e TODAS as fotos vinculadas no banco de dados. Deseja continuar?")) return;
+    
+    try {
+      const { error } = await supabase.from('albums').delete().eq('id', albumId);
+      if (error) throw error;
+      setAlbums(prev => prev.filter(a => a.id !== albumId));
+      if (selectedAlbum?.id === albumId) setSelectedAlbum(null);
+      alert("Álbum removido com sucesso.");
+    } catch (err) {
+      console.error("Erro ao excluir álbum:", err);
+      alert("Não foi possível excluir o álbum.");
+    }
+  };
+
   const handleDeletePhoto = async (photoId: string) => {
     if (!confirm("Deseja realmente excluir esta foto?")) return;
     try {
@@ -216,6 +231,9 @@ const Albums: React.FC<AlbumsProps> = ({ initialOpenModal, onModalClose }) => {
             </div>
           </div>
           <div className="md:ml-auto flex gap-3">
+             <Button variant="danger" className="rounded-xl border-white/10" onClick={() => handleDeleteAlbum(selectedAlbum.id)}>
+               {ICONS.Delete} Excluir Álbum
+             </Button>
              <Button variant="outline" className="rounded-xl border-white/10" onClick={() => fileInputRef.current?.click()}>
                {ICONS.Plus} Add Fotos
              </Button>
@@ -314,7 +332,13 @@ const Albums: React.FC<AlbumsProps> = ({ initialOpenModal, onModalClose }) => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredAlbums.map((album) => (
-            <div key={album.id} className="group bg-slate-900 border border-slate-800 rounded-[2.5rem] overflow-hidden hover:border-[#d4af37]/40 transition-all duration-300 shadow-2xl">
+            <div key={album.id} className="group bg-slate-900 border border-slate-800 rounded-[2.5rem] overflow-hidden hover:border-[#d4af37]/40 transition-all duration-300 shadow-2xl relative">
+              <button 
+                onClick={(e) => { e.stopPropagation(); handleDeleteAlbum(album.id); }}
+                className="absolute top-4 right-4 z-10 p-2 bg-black/50 text-red-500 rounded-lg opacity-0 group-hover:opacity-100 transition-all hover:bg-red-500 hover:text-white"
+              >
+                {ICONS.Delete}
+              </button>
               <div className="relative aspect-video bg-slate-950 flex items-center justify-center overflow-hidden">
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-950 to-transparent opacity-60"></div>
                 <div className="text-slate-800 text-5xl transform group-hover:scale-110 transition-transform">{ICONS.Photo}</div>
