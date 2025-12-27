@@ -73,16 +73,20 @@ const Albums: React.FC<AlbumsProps> = ({ initialOpenModal, onModalClose }) => {
     setSelectedAlbum(album);
     setLoadingPhotos(true);
     try {
-      // Removida a ordenação para evitar erro 400 caso o SQL ainda não tenha rodado
+      // Agora que rodamos o SQL, podemos usar o order by com segurança
       const { data, error } = await supabase
         .from('photos')
         .select('*')
-        .eq('album_id', album.id);
+        .eq('album_id', album.id)
+        .order('created_at', { ascending: true });
         
       if (error) throw error;
       setAlbumPhotos(data || []);
     } catch (err) {
       console.error("Erro ao carregar fotos do álbum:", err);
+      // Fallback caso o SQL ainda não tenha sido aplicado
+      const { data } = await supabase.from('photos').select('*').eq('album_id', album.id);
+      setAlbumPhotos(data || []);
     } finally {
       setLoadingPhotos(false);
     }

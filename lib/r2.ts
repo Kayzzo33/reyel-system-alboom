@@ -1,6 +1,6 @@
 
-// Importando o SDK com flag específica para browser para evitar poluição de unenv/fs
-import { S3Client, PutObjectCommand } from "https://esm.sh/@aws-sdk/client-s3@3.540.0?target=browser";
+// Usamos aws4fetch: uma biblioteca leve que faz o mesmo que o SDK, mas sem tentar acessar o disco rígido.
+import { AwsClient } from "https://esm.sh/aws4fetch@1.0.20";
 
 const getEnv = (key: string, fallback: string): string => {
   try {
@@ -25,6 +25,14 @@ export interface UploadProgress {
   url?: string;
 }
 
+// Inicializamos o cliente de forma estática e segura para o browser
+const r2Client = new AwsClient({
+  accessKeyId: R2_CONFIG.accessKeyId,
+  secretAccessKey: R2_CONFIG.secretAccessKey,
+  service: 's3',
+  region: 'auto',
+});
+
 export async function uploadPhotoToR2(
   file: File, 
   albumId: string, 
@@ -32,38 +40,32 @@ export async function uploadPhotoToR2(
 ): Promise<{ url: string; key: string }> {
   try {
     const key = `albums/${albumId}/originals/${Date.now()}-${file.name.replace(/\s+/g, '_')}`;
+    const uploadUrl = `https://${R2_CONFIG.accountId}.r2.cloudflarestorage.com/${R2_CONFIG.bucketName}/${key}`;
+    
     onProgress(10);
 
-    // CRITICAL FIX: Explicitamente força o modo 'standard' e passa credenciais diretas
-    // O SDK para browser não deve tentar carregar provedores de credenciais de arquivo
-    const s3 = new S3Client({
-      region: "auto",
-      endpoint: `https://${R2_CONFIG.accountId}.r2.cloudflarestorage.com`,
-      credentials: {
-        accessKeyId: R2_CONFIG.accessKeyId,
-        secretAccessKey: R2_CONFIG.secretAccessKey,
-      }
+    // O aws4fetch assina a requisição usando Web Crypto (nativo do browser)
+    // Isso NÃO usa o sistema de arquivos e NÃO causa erro de unenv
+    const response = await r2Client.fetch(uploadUrl, {
+      method: 'PUT',
+      body: file,
+      headers: {
+        'Content-Type': file.type,
+      },
     });
 
-    const arrayBuffer = await file.arrayBuffer();
-    const command = new PutObjectCommand({
-      Bucket: R2_CONFIG.bucketName,
-      Key: key,
-      Body: new Uint8Array(arrayBuffer),
-      ContentType: file.type,
-    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('R2 Response Error:', errorText);
+      throw new Error(`Erro no R2: ${response.statusText}`);
+    }
 
-    await s3.send(command);
     onProgress(100);
     
-    const url = `${R2_CONFIG.publicUrl}/${key}`;
-    return { url, key };
+    const publicUrl = `${R2_CONFIG.publicUrl}/${key}`;
+    return { url: publicUrl, key };
   } catch (error: any) {
-    console.error('R2 Upload Error:', error);
-    // Se o erro ainda for sobre fs.readFile, significa que o esm.sh falhou no polyfill
-    if (error.message?.includes('fs.readFile')) {
-       throw new Error("Erro de compatibilidade: O navegador tentou usar funções de servidor. Tente limpar o cache ou usar o Chrome/Edge atualizado.");
-    }
-    throw error;
+    console.error('Falha Crítica no Upload:', error);
+    throw new Error("Erro de conexão com o Storage. Verifique se o CORS no Cloudflare está configurado para permitir o seu domínio.");
   }
 }
