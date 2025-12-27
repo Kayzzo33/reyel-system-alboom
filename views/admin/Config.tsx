@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
 import { uploadPhotoToR2 } from '../../lib/r2';
-import { ICONS, COLORS } from '../../constants';
+import { ICONS } from '../../constants';
 import Button from '../../components/ui/Button';
 import { Profile } from '../../types';
 
@@ -20,38 +20,67 @@ const Config: React.FC = () => {
 
   const fetchProfile = async () => {
     setLoading(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-      setProfile(data);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        console.log("Buscando perfil para ID:", user.id);
+        const { data, error } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+        if (error) {
+          console.error("Erro ao buscar perfil:", error.message);
+        }
+        setProfile(data);
+      }
+    } catch (err) {
+      console.error("Erro fatal fetchProfile:", err);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'logo' | 'watermark') => {
     const file = e.target.files?.[0];
-    if (!file || !profile) return;
+    if (!file) {
+      console.log("Nenhum arquivo selecionado.");
+      return;
+    }
+
+    if (!profile) {
+      alert("Erro: Perfil não carregado. Tente recarregar a página.");
+      return;
+    }
 
     try {
       setSaving(true);
-      const { url } = await uploadPhotoToR2(file, 'profile-assets', () => {});
+      console.log(`Iniciando upload de ${type}:`, file.name);
+      
+      const { url } = await uploadPhotoToR2(file, 'profile-assets', (progress) => {
+        console.log(`Upload progress (${type}): ${progress}%`);
+      });
+
+      console.log("Arquivo no R2 com sucesso. URL:", url);
       
       const updates = type === 'logo' ? { logo_url: url } : { marca_dagua_url: url };
       
+      console.log("Atualizando Supabase com:", updates);
       const { error } = await supabase
         .from('profiles')
         .update(updates)
         .eq('id', profile.id);
 
-      if (error) throw error;
+      if (error) {
+        console.error("Erro Supabase Update:", error.message);
+        throw new Error(error.message);
+      }
       
       setProfile({ ...profile, ...updates });
-      alert(`${type === 'logo' ? 'Logo' : 'Marca d\'água'} atualizada com sucesso!`);
-    } catch (err) {
-      console.error(err);
-      alert('Erro ao subir arquivo.');
+      alert(`Sucesso! ${type === 'logo' ? 'Logo' : 'Marca d\'água'} atualizada.`);
+    } catch (err: any) {
+      console.error(`Erro no processo de ${type}:`, err);
+      alert(`Falha no upload: ${err.message || 'Erro desconhecido'}`);
     } finally {
       setSaving(false);
+      // Limpa o input para permitir selecionar o mesmo arquivo novamente se necessário
+      if (e.target) e.target.value = '';
     }
   };
 
@@ -65,7 +94,6 @@ const Config: React.FC = () => {
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Identidade Visual */}
         <div className="bg-slate-900 border border-slate-800 rounded-[2.5rem] p-10 space-y-8 shadow-xl">
           <div className="flex items-center gap-4">
             <div className="p-3 bg-blue-500/10 text-blue-500 rounded-2xl">{ICONS.Config}</div>
@@ -73,11 +101,10 @@ const Config: React.FC = () => {
           </div>
 
           <div className="space-y-10">
-            {/* Logo */}
             <div className="flex flex-col md:flex-row items-center gap-8">
               <div className="w-32 h-32 bg-slate-950 rounded-3xl border border-white/5 flex items-center justify-center overflow-hidden group relative">
                 {profile?.logo_url ? (
-                  <img src={profile.logo_url} className="w-full h-full object-contain" />
+                  <img src={profile.logo_url} className="w-full h-full object-contain p-2" alt="Logo preview" />
                 ) : (
                   <span className="text-slate-700 text-3xl font-black">LOGO</span>
                 )}
@@ -87,17 +114,16 @@ const Config: React.FC = () => {
               </div>
               <div className="flex-1 space-y-2 text-center md:text-left">
                 <h4 className="font-bold text-white">Logotipo do Estúdio</h4>
-                <p className="text-xs text-slate-500 leading-relaxed max-w-xs">Aparecerá no cabeçalho das galerias públicas dos seus clientes. Recomendado: PNG transparente.</p>
+                <p className="text-xs text-slate-500 leading-relaxed max-w-xs">Aparecerá nas galerias públicas. PNG transparente recomendado.</p>
                 <input type="file" hidden ref={logoInputRef} onChange={(e) => handleFileUpload(e, 'logo')} accept="image/*" />
                 <Button variant="outline" size="sm" className="mt-2" onClick={() => logoInputRef.current?.click()}>Subir Logo</Button>
               </div>
             </div>
 
-            {/* Marca D'água */}
             <div className="flex flex-col md:flex-row items-center gap-8 pt-8 border-t border-white/5">
               <div className="w-32 h-32 bg-slate-950 rounded-3xl border border-white/5 flex items-center justify-center overflow-hidden group relative">
                 {profile?.marca_dagua_url ? (
-                  <img src={profile.marca_dagua_url} className="w-full h-full object-contain opacity-50" />
+                  <img src={profile.marca_dagua_url} className="w-full h-full object-contain opacity-50 p-2" alt="Watermark preview" />
                 ) : (
                   <div className="text-slate-800 text-3xl">{ICONS.Photo}</div>
                 )}
@@ -106,11 +132,8 @@ const Config: React.FC = () => {
                 </div>
               </div>
               <div className="flex-1 space-y-2 text-center md:text-left">
-                <h4 className="font-bold text-white text-emerald-400 flex items-center gap-2">
-                  Marca D'água Ativa
-                  <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-                </h4>
-                <p className="text-xs text-slate-500 leading-relaxed max-w-xs">Proteja suas fotos. Esta imagem será sobreposta em todas as visualizações da galeria.</p>
+                <h4 className="font-bold text-white text-emerald-400 flex items-center gap-2">Marca D'água Ativa</h4>
+                <p className="text-xs text-slate-500 leading-relaxed max-w-xs">Proteja suas fotos. Será sobreposta em todas as visualizações.</p>
                 <input type="file" hidden ref={watermarkInputRef} onChange={(e) => handleFileUpload(e, 'watermark')} accept="image/*" />
                 <Button variant="primary" size="sm" className="mt-2" onClick={() => watermarkInputRef.current?.click()}>Subir Marca D'água</Button>
               </div>
@@ -118,7 +141,6 @@ const Config: React.FC = () => {
           </div>
         </div>
 
-        {/* Status do Sistema */}
         <div className="space-y-8">
           <div className="bg-slate-900 border border-slate-800 rounded-[2.5rem] p-10 shadow-xl">
              <div className="flex items-center justify-between mb-8">
@@ -128,35 +150,28 @@ const Config: React.FC = () => {
              <div className="space-y-4">
                 <div className="flex items-center justify-between p-4 bg-slate-950 rounded-2xl border border-white/5">
                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-blue-500/10 text-blue-500 rounded-lg flex items-center justify-center">S</div>
-                      <span className="text-sm font-semibold">Supabase Database</span>
+                      <div className="w-8 h-8 bg-blue-500/10 text-blue-500 rounded-lg flex items-center justify-center font-bold">S</div>
+                      <span className="text-sm font-semibold">Supabase (Banco)</span>
                    </div>
                    {ICONS.Check}
                 </div>
                 <div className="flex items-center justify-between p-4 bg-slate-950 rounded-2xl border border-white/5">
                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-orange-500/10 text-orange-500 rounded-lg flex items-center justify-center">R2</div>
-                      <span className="text-sm font-semibold">Cloudflare Storage</span>
+                      <div className="w-8 h-8 bg-orange-500/10 text-orange-500 rounded-lg flex items-center justify-center font-bold">R2</div>
+                      <span className="text-sm font-semibold">Cloudflare (Fotos)</span>
                    </div>
                    {ICONS.Check}
                 </div>
              </div>
           </div>
-
-          <div className="bg-[#d4af37]/5 border border-[#d4af37]/20 rounded-[2.5rem] p-8">
-             <h4 className="text-[#d4af37] font-bold mb-2">Dica Profissional</h4>
-             <p className="text-[#d4af37]/70 text-xs leading-relaxed">
-               Use uma marca d'água com fundo transparente (PNG) e baixa opacidade para que o cliente consiga ver a foto, mas não consiga usá-la comercialmente sem pagar.
-             </p>
-          </div>
         </div>
       </div>
 
       {saving && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center">
-           <div className="bg-slate-900 p-8 rounded-3xl border border-white/10 flex items-center gap-4">
-              <div className="w-6 h-6 border-2 border-[#d4af37] border-t-transparent rounded-full animate-spin"></div>
-              <span className="font-bold">Salvando alterações...</span>
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[100] flex items-center justify-center">
+           <div className="bg-slate-900 p-10 rounded-[2.5rem] border border-white/10 flex flex-col items-center gap-6 shadow-2xl">
+              <div className="w-10 h-10 border-4 border-[#d4af37] border-t-transparent rounded-full animate-spin"></div>
+              <span className="font-bold text-[#d4af37] tracking-widest uppercase text-xs">Atualizando Storage...</span>
            </div>
         </div>
       )}

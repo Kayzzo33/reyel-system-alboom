@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
-import { ICONS, COLORS } from '../../constants';
+import { ICONS } from '../../constants';
 import Button from '../../components/ui/Button';
 import { Client } from '../../types';
 
@@ -20,34 +20,52 @@ const Clients: React.FC = () => {
   const fetchClients = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('clients')
-        .select('*')
-        .order('nome');
+      const { data, error } = await supabase.from('clients').select('*').order('nome');
       if (error) throw error;
       setClients(data || []);
     } catch (err) {
-      console.error('Erro:', err);
+      console.error('Erro ao buscar clientes:', err);
     } finally {
       setLoading(false);
     }
   };
 
   const handleSaveClient = async () => {
-    if (!newClient.nome || !newClient.email) return;
+    if (!newClient.nome || !newClient.email) {
+      alert("Nome e E-mail são obrigatórios.");
+      return;
+    }
+
     try {
       setSaving(true);
       const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        alert("Sessão expirada. Faça login novamente.");
+        return;
+      }
+
+      console.log("Tentando salvar cliente para o fotógrafo:", user.id);
+      
       const { error } = await supabase.from('clients').insert([{
-        ...newClient,
-        photographer_id: user?.id
+        nome: newClient.nome,
+        email: newClient.email,
+        whatsapp: newClient.whatsapp,
+        photographer_id: user.id
       }]);
-      if (error) throw error;
+
+      if (error) {
+        console.error("ERRO SUPABASE AO SALVAR CLIENTE:", error);
+        throw new Error(error.message);
+      }
+
       setIsModalOpen(false);
       setNewClient({ nome: '', email: '', whatsapp: '' });
       fetchClients();
-    } catch (err) {
-      alert('Erro ao salvar cliente');
+      alert("Cliente cadastrado com sucesso!");
+    } catch (err: any) {
+      console.error("Erro detalhado:", err);
+      alert(`Erro ao salvar cliente: ${err.message || 'Verifique o console para detalhes.'}`);
     } finally {
       setSaving(false);
     }
@@ -88,12 +106,12 @@ const Clients: React.FC = () => {
         </div>
       ) : (
         <div className="bg-slate-900/50 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl">
-          <table className="w-full">
+          <table className="w-full text-left">
             <thead className="bg-slate-950/50 border-b border-slate-800">
               <tr>
-                <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">Nome</th>
-                <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">E-mail</th>
-                <th className="px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase">WhatsApp</th>
+                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Nome</th>
+                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">E-mail</th>
+                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">WhatsApp</th>
                 <th className="px-6 py-4 text-right text-xs font-bold text-slate-500 uppercase">Ações</th>
               </tr>
             </thead>
@@ -117,7 +135,7 @@ const Clients: React.FC = () => {
               ))}
               {filteredClients.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-6 py-12 text-center text-slate-500">Nenhum cliente cadastrado.</td>
+                  <td colSpan={4} className="px-6 py-12 text-center text-slate-500 italic">Nenhum cliente cadastrado ainda.</td>
                 </tr>
               )}
             </tbody>
@@ -128,7 +146,7 @@ const Clients: React.FC = () => {
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-slate-900 border border-white/10 w-full max-w-md rounded-[2.5rem] p-10 shadow-2xl">
-            <h3 className="text-2xl font-bold text-white mb-6">Cadastrar Cliente</h3>
+            <h3 className="text-2xl font-bold text-white mb-6 tracking-tight">Cadastrar Cliente</h3>
             <div className="space-y-5">
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-500 uppercase ml-1">Nome Completo</label>
@@ -137,6 +155,7 @@ const Clients: React.FC = () => {
                   className="w-full bg-slate-950 border border-white/5 rounded-2xl px-5 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#d4af37]/40"
                   value={newClient.nome}
                   onChange={(e) => setNewClient({...newClient, nome: e.target.value})}
+                  placeholder="Nome do cliente"
                 />
               </div>
               <div className="space-y-1.5">
@@ -146,6 +165,7 @@ const Clients: React.FC = () => {
                   className="w-full bg-slate-950 border border-white/5 rounded-2xl px-5 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#d4af37]/40"
                   value={newClient.email}
                   onChange={(e) => setNewClient({...newClient, email: e.target.value})}
+                  placeholder="cliente@email.com"
                 />
               </div>
               <div className="space-y-1.5">
@@ -161,7 +181,7 @@ const Clients: React.FC = () => {
             </div>
             <div className="flex gap-4 mt-10">
               <Button variant="ghost" className="flex-1 rounded-2xl" onClick={() => setIsModalOpen(false)}>Cancelar</Button>
-              <Button variant="primary" className="flex-1 rounded-2xl" isLoading={saving} onClick={handleSaveClient}>Salvar</Button>
+              <Button variant="primary" className="flex-1 rounded-2xl font-bold" isLoading={saving} onClick={handleSaveClient}>Salvar Cliente</Button>
             </div>
           </div>
         </div>
