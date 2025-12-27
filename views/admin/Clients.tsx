@@ -145,6 +145,57 @@ const Clients: React.FC = () => {
           </div>
         </div>
       )}
+
+      {isModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-6 bg-black/90 backdrop-blur-xl animate-in fade-in duration-300">
+          <div className="bg-[#0a0a0a] border border-white/5 w-full max-w-lg rounded-[3rem] p-8 md:p-12 shadow-3xl relative">
+            <button onClick={() => setIsModalOpen(false)} className="absolute top-8 right-8 text-slate-500 hover:text-white transition-colors">{ICONS.Back}</button>
+            <div className="space-y-8">
+              <div>
+                <h3 className="text-2xl font-black text-white uppercase tracking-tighter">Novo Cadastro</h3>
+                <p className="text-slate-600 text-xs font-bold mt-2 uppercase tracking-widest">Adicione um novo cliente à sua base.</p>
+              </div>
+              
+              <div className="space-y-5">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Nome Completo</label>
+                  <input 
+                    type="text" 
+                    placeholder="Ex: Maria Oliveira" 
+                    className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 text-white font-bold outline-none focus:ring-1 focus:ring-red-600/40" 
+                    value={newClient.nome} 
+                    onChange={e => setNewClient({...newClient, nome: e.target.value})} 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">E-mail</label>
+                  <input 
+                    type="email" 
+                    placeholder="maria@exemplo.com" 
+                    className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 text-white font-bold outline-none focus:ring-1 focus:ring-red-600/40" 
+                    value={newClient.email} 
+                    onChange={e => setNewClient({...newClient, email: e.target.value})} 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">WhatsApp (DDD)</label>
+                  <input 
+                    type="text" 
+                    placeholder="11999999999" 
+                    className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 text-emerald-500 font-black outline-none focus:ring-1 focus:ring-emerald-500/40" 
+                    value={newClient.whatsapp} 
+                    onChange={e => setNewClient({...newClient, whatsapp: e.target.value})} 
+                  />
+                </div>
+              </div>
+              
+              <Button variant="primary" className="w-full py-5 rounded-2xl font-black uppercase text-xs" isLoading={saving} onClick={handleSaveClient}>
+                Salvar Cadastro
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
