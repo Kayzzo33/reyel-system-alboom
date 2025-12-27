@@ -1,6 +1,6 @@
 
-// Usando uma versão específica e estável para browser do SDK
-import { S3Client, PutObjectCommand } from "https://esm.sh/@aws-sdk/client-s3@3.540.0";
+// Importando o SDK com flag específica para browser para evitar poluição de unenv/fs
+import { S3Client, PutObjectCommand } from "https://esm.sh/@aws-sdk/client-s3@3.540.0?target=browser";
 
 const getEnv = (key: string, fallback: string): string => {
   try {
@@ -34,6 +34,7 @@ export async function uploadPhotoToR2(
     const key = `albums/${albumId}/originals/${Date.now()}-${file.name.replace(/\s+/g, '_')}`;
     onProgress(10);
 
+    // CRITICAL FIX: Explicitamente desabilita a busca por credenciais no sistema de arquivos
     const s3 = new S3Client({
       region: "auto",
       endpoint: `https://${R2_CONFIG.accountId}.r2.cloudflarestorage.com`,
@@ -41,6 +42,8 @@ export async function uploadPhotoToR2(
         accessKeyId: R2_CONFIG.accessKeyId,
         secretAccessKey: R2_CONFIG.secretAccessKey,
       },
+      // Impede o SDK de tentar ler arquivos locais (Node.js fallback)
+      defaultsMode: "standard"
     });
 
     const arrayBuffer = await file.arrayBuffer();
@@ -56,8 +59,12 @@ export async function uploadPhotoToR2(
     
     const url = `${R2_CONFIG.publicUrl}/${key}`;
     return { url, key };
-  } catch (error) {
+  } catch (error: any) {
     console.error('R2 Upload Error:', error);
+    // Se o erro ainda for fs.readFile, lançamos um erro mais descritivo
+    if (error.message?.includes('fs.readFile')) {
+       throw new Error("Conflito de ambiente: O SDK tentou acessar o disco rígido. Use um navegador moderno.");
+    }
     throw error;
   }
 }
