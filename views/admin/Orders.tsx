@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
+import { R2_CONFIG } from '../../lib/r2';
 import { ICONS, COLORS } from '../../constants';
 import Button from '../../components/ui/Button';
 
@@ -10,16 +11,19 @@ interface OrderGroup {
   album_nome: string;
   client_nome: string;
   client_whatsapp: string;
+  client_email: string;
   photo_count: number;
   preco_por_foto: number;
   latest_date: string;
-  photos: string[];
+  photos: any[]; // Detalhes das fotos
+  status: string; // 'pendente' | 'pago'
 }
 
 const Orders: React.FC = () => {
   const [orders, setOrders] = useState<OrderGroup[]>([]);
   const [loading, setLoading] = useState(true);
-  const [debugMsg, setDebugMsg] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'andamento' | 'pago'>('andamento');
+  const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
 
   useEffect(() => {
     fetchOrders();
@@ -28,162 +32,186 @@ const Orders: React.FC = () => {
   const fetchOrders = async () => {
     try {
       setLoading(true);
-      setDebugMsg(null);
       
-      // Busca seleções. Usamos nomes explícitos caso as relações automáticas falhem
-      const { data, error } = await supabase
+      // Busca seleções e fotos vinculadas
+      const { data: selections, error } = await supabase
         .from('selections')
         .select(`
           id,
           created_at,
-          album:album_id (id, nome_galeria, preco_por_foto),
-          client:client_id (id, nome, whatsapp),
-          photo_id
+          album_id (id, nome_galeria, preco_por_foto),
+          client_id (id, nome, whatsapp, email),
+          photo:photo_id (*)
         `);
 
-      if (error) {
-        console.error("Erro Supabase Orders:", error);
-        setDebugMsg("Erro ao carregar do banco: " + error.message);
-        throw error;
-      }
+      if (error) throw error;
 
-      if (!data || data.length === 0) {
-        console.log("Nenhum dado de seleção encontrado no banco.");
-        setOrders([]);
-        return;
-      }
-
-      console.log("Seleções encontradas:", data.length);
+      // Busca status de pagamento
+      const { data: statuses } = await supabase.from('order_status').select('*');
 
       const groups: { [key: string]: OrderGroup } = {};
 
-      data.forEach((sel: any) => {
-        // Fallback caso o join venha com nomes diferentes ou nulo
-        const albumData = sel.album || sel.albums;
-        const clientData = sel.client || sel.clients;
+      selections?.forEach((sel: any) => {
+        const album = sel.album_id;
+        const client = sel.client_id;
+        if (!album || !client) return;
 
-        if (!albumData || !clientData) {
-          console.warn("Seleção ignorada por falta de relação (Album/Client):", sel.id);
-          return;
-        }
+        const key = `${album.id}-${client.id}`;
+        
+        // Determina status
+        const orderStatus = statuses?.find(s => s.album_id === album.id && s.client_id === client.id)?.status || 'pendente';
 
-        const key = `${albumData.id}-${clientData.id}`;
         if (!groups[key]) {
           groups[key] = {
-            album_id: albumData.id,
-            client_id: clientData.id,
-            album_nome: albumData.nome_galeria,
-            client_nome: clientData.nome,
-            client_whatsapp: clientData.whatsapp || '',
-            preco_por_foto: albumData.preco_por_foto || 0,
+            album_id: album.id,
+            client_id: client.id,
+            album_nome: album.nome_galeria,
+            client_nome: client.nome,
+            client_whatsapp: client.whatsapp || '',
+            client_email: client.email || '',
+            preco_por_foto: album.preco_por_foto || 0,
             photo_count: 0,
             latest_date: sel.created_at,
-            photos: []
+            photos: [],
+            status: orderStatus
           };
         }
         groups[key].photo_count += 1;
-        groups[key].photos.push(sel.photo_id);
+        if (sel.photo) groups[key].photos.push(sel.photo);
       });
 
       setOrders(Object.values(groups).sort((a, b) => new Date(b.latest_date).getTime() - new Date(a.latest_date).getTime()));
-    } catch (err: any) {
-      console.error("Erro ao buscar pedidos:", err);
+    } catch (err) {
+      console.error("Erro pedidos:", err);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleChargeWhatsApp = (order: OrderGroup) => {
-    const total = (order.photo_count * order.preco_por_foto).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-    const message = `Olá ${order.client_nome}! 👋%0A%0AVi que você finalizou a seleção de *${order.photo_count} fotos* no álbum *${order.album_nome}*.%0A%0AO valor total da sua seleção é de *${total}*.%0A%0AVou te enviar minha chave PIX para concluirmos. Aguardo o comprovante para liberar o download! 📸`;
-    
-    const whatsappUrl = `https://wa.me/55${order.client_whatsapp.replace(/\D/g, '')}?text=${message}`;
-    window.open(whatsappUrl, '_blank');
-  };
-
-  const handleDeleteSelections = async (order: OrderGroup) => {
-    if (!confirm(`Deseja limpar as seleções de ${order.client_nome} para este álbum?`)) return;
+  const handleUpdateStatus = async (order: OrderGroup, newStatus: string) => {
     try {
       const { error } = await supabase
-        .from('selections')
-        .delete()
-        .eq('album_id', order.album_id)
-        .eq('client_id', order.client_id);
+        .from('order_status')
+        .upsert({ 
+          album_id: order.album_id, 
+          client_id: order.client_id, 
+          status: newStatus 
+        }, { onConflict: 'album_id,client_id' });
       
       if (error) throw error;
+      alert(newStatus === 'pago' ? "Pagamento aprovado! O cliente agora pode baixar as fotos." : "Status atualizado.");
       fetchOrders();
     } catch (err) {
-      alert("Erro ao excluir.");
+      alert("Erro ao atualizar status.");
     }
   };
 
+  const handleChargeWhatsApp = (order: OrderGroup) => {
+    const total = (order.photo_count * order.preco_por_foto).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const message = `Olá ${order.client_nome}! 👋%0A%0AVi que você escolheu *${order.photo_count} fotos* do álbum *${order.album_nome}*.%0A%0AO total é de *${total}*. Aguardo o PIX para liberar seu acesso! 📸`;
+    window.open(`https://wa.me/55${order.client_whatsapp.replace(/\D/g, '')}?text=${message}`, '_blank');
+  };
+
+  const filteredOrders = orders.filter(o => o.status === activeTab);
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-20">
-      <header className="flex justify-between items-center">
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
           <h2 className="text-3xl font-bold text-white tracking-tight">Seleções e Pedidos</h2>
-          <p className="text-slate-400">Acompanhe as escolhas dos clientes e gerencie as cobranças.</p>
+          <p className="text-slate-400 font-medium">Acompanhe as escolhas dos seus clientes em tempo real.</p>
         </div>
-        <Button variant="ghost" size="sm" onClick={fetchOrders} className="rounded-xl bg-slate-800">Atualizar</Button>
+        
+        <div className="flex bg-slate-900 p-1.5 rounded-2xl border border-white/5 shadow-inner">
+           <button 
+             className={`px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'andamento' ? 'bg-[#d4af37] text-black shadow-lg' : 'text-slate-500 hover:text-white'}`}
+             onClick={() => setActiveTab('andamento')}
+           >
+             Em Aberto
+           </button>
+           <button 
+             className={`px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'pago' ? 'bg-[#d4af37] text-black shadow-lg' : 'text-slate-500 hover:text-white'}`}
+             onClick={() => setActiveTab('pago')}
+           >
+             Finalizados
+           </button>
+        </div>
       </header>
 
-      {debugMsg && (
-        <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-2xl text-red-500 text-xs font-bold">
-          {debugMsg}
-        </div>
-      )}
-
       {loading ? (
-        <div className="space-y-4">
-          {[1, 2].map(i => <div key={i} className="h-32 bg-slate-900 rounded-[2rem] animate-pulse"></div>)}
-        </div>
-      ) : orders.length === 0 ? (
+        <div className="h-64 bg-slate-900/50 rounded-[3rem] animate-pulse"></div>
+      ) : filteredOrders.length === 0 ? (
         <div className="py-24 text-center bg-slate-900/50 border-2 border-dashed border-slate-800 rounded-[3rem] flex flex-col items-center gap-4">
-          <div className="w-16 h-16 bg-slate-800 rounded-2xl flex items-center justify-center text-slate-600">{ICONS.Orders}</div>
-          <p className="text-slate-500 font-medium">Nenhuma seleção finalizada até o momento.</p>
-          <p className="text-slate-600 text-[10px] uppercase font-black">Dica: O cliente precisa clicar em "Finalizar Seleção" na galeria.</p>
+           <div className="w-16 h-16 bg-slate-800 rounded-2xl flex items-center justify-center text-slate-600">{ICONS.Orders}</div>
+           <p className="text-slate-500 font-bold">Nenhum pedido nesta categoria.</p>
         </div>
       ) : (
         <div className="grid gap-6">
-          {orders.map((order, idx) => (
-            <div key={idx} className="bg-slate-900 border border-white/5 rounded-[2.5rem] p-8 flex flex-col md:flex-row items-center justify-between gap-8 hover:border-[#d4af37]/30 transition-all group shadow-xl">
-              <div className="flex items-center gap-6">
-                <div className="w-16 h-16 bg-[#d4af37]/10 text-[#d4af37] rounded-2xl flex items-center justify-center font-black text-xl ring-1 ring-[#d4af37]/20">
-                  {order.photo_count}
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold text-white group-hover:text-[#d4af37] transition-colors">{order.client_nome}</h3>
-                  <p className="text-slate-500 text-sm font-medium">Álbum: <span className="text-slate-300">{order.album_nome}</span></p>
-                  <p className="text-[10px] text-slate-600 font-black uppercase tracking-widest mt-1">
-                    {new Date(order.latest_date).toLocaleDateString('pt-BR')} às {new Date(order.latest_date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                  </p>
-                </div>
-              </div>
+          {filteredOrders.map((order, idx) => {
+            const isExpanded = expandedOrder === `${order.album_id}-${order.client_id}`;
+            return (
+              <div key={idx} className={`bg-slate-900 border border-white/5 rounded-[2.5rem] overflow-hidden transition-all duration-500 ${isExpanded ? 'ring-2 ring-[#d4af37]/40 shadow-2xl shadow-[#d4af37]/5' : 'hover:border-white/10'}`}>
+                <div className="p-8 flex flex-col md:flex-row items-center justify-between gap-8">
+                  <div className="flex items-center gap-6">
+                    <div className="w-16 h-16 bg-[#d4af37]/10 text-[#d4af37] rounded-2xl flex items-center justify-center font-black text-xl border border-[#d4af37]/20">
+                      {order.photo_count}
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-black text-white">{order.client_nome}</h3>
+                      <p className="text-slate-500 text-xs font-bold uppercase tracking-widest">Álbum: <span className="text-slate-200">{order.album_nome}</span></p>
+                      <p className="text-[10px] text-slate-600 font-black uppercase mt-1">Sessão: {new Date(order.latest_date).toLocaleString()}</p>
+                    </div>
+                  </div>
 
-              <div className="flex flex-col items-center md:items-end gap-2">
-                <p className="text-2xl font-black text-white">
-                  {(order.photo_count * order.preco_por_foto).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                </p>
-                <div className="flex gap-3">
-                  <button 
-                    onClick={() => handleDeleteSelections(order)}
-                    className="p-3 bg-red-500/10 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-all shadow-lg"
-                    title="Excluir Seleção"
-                  >
-                    {ICONS.Delete}
-                  </button>
-                  <Button 
-                    variant="primary" 
-                    className="rounded-xl px-6 font-bold flex items-center gap-2 shadow-lg shadow-[#d4af37]/10"
-                    onClick={() => handleChargeWhatsApp(order)}
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.417-.003 6.557-5.338 11.892-11.893 11.892-1.997-.001-3.951-.5-5.688-1.448l-6.305 1.652zm6.599-3.819c1.556.925 3.129 1.411 4.799 1.412 5.303 0 9.613-4.31 9.615-9.613.001-2.569-1.002-4.984-2.825-6.808-1.823-1.824-4.238-2.827-6.81-2.827-5.303 0-9.613 4.31-9.615 9.614-.001 1.834.52 3.488 1.503 5.013l-.934 3.414 3.52-.922zm11.363-5.062c-.312-.156-1.848-.912-2.134-1.017-.286-.105-.494-.156-.701.156-.207.312-.803 1.017-.984 1.223-.182.206-.363.231-.675.075-.312-.156-1.316-.484-2.508-1.547-.926-.826-1.551-1.847-1.733-2.159-.182-.312-.019-.481.137-.636.141-.14.312-.363.468-.544.156-.182.208-.312.312-.519.104-.207.052-.389-.026-.544-.078-.156-.701-1.687-.961-2.312-.253-.609-.51-.525-.701-.535-.181-.01-.389-.012-.597-.012s-.545.078-.83.389c-.286.312-1.09.1.066-1.09 2.312s.804 1.503 1.037 1.815c.234.312 3.033 4.631 7.348 6.494.103.1.201.21.298.318.847.788 1.68 1.14 2.308 1.047.701-.104 2.134-.872 2.433-1.716.3-.843.3-1.562.208-1.716-.092-.154-.34-.247-.652-.403z"/></svg>
-                    Cobrar WhatsApp
-                  </Button>
+                  <div className="flex items-center gap-6">
+                    <div className="text-right">
+                       <p className="text-2xl font-black text-white">{(order.photo_count * order.preco_por_foto).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                       <p className="text-[9px] text-slate-500 font-bold uppercase">Valor Estimado</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={() => setExpandedOrder(isExpanded ? null : `${order.album_id}-${order.client_id}`)}
+                        className={`p-4 rounded-xl transition-all border ${isExpanded ? 'bg-[#d4af37] text-black border-[#d4af37]' : 'bg-slate-850 text-slate-400 border-white/5 hover:text-white'}`}
+                      >
+                        {ICONS.View}
+                      </button>
+                      <button onClick={() => handleChargeWhatsApp(order)} className="p-4 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 rounded-xl hover:bg-emerald-500 hover:text-white transition-all">
+                        {ICONS.Orders}
+                      </button>
+                    </div>
+                  </div>
                 </div>
+
+                {isExpanded && (
+                  <div className="px-8 pb-8 animate-in slide-in-from-top-4 duration-500">
+                    <div className="border-t border-white/5 pt-8 space-y-8">
+                       <div className="flex justify-between items-end">
+                          <h4 className="text-[10px] font-black text-[#d4af37] uppercase tracking-widest">Fotos Selecionadas ({order.photo_count})</h4>
+                          {order.status === 'pendente' && (
+                            <Button variant="primary" size="sm" className="rounded-xl px-6 py-3 font-black uppercase text-[10px] tracking-widest" onClick={() => handleUpdateStatus(order, 'pago')}>
+                              Aprovar Pagamento e Liberar Download
+                            </Button>
+                          )}
+                          {order.status === 'pago' && (
+                            <Button variant="outline" size="sm" className="rounded-xl px-6 py-3 font-black uppercase text-[10px] tracking-widest text-emerald-500 border-emerald-500/30" onClick={() => handleUpdateStatus(order, 'andamento')}>
+                              Revogar Acesso (Marcar como Pendente)
+                            </Button>
+                          )}
+                       </div>
+                       
+                       <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-4 bg-slate-950/50 p-6 rounded-3xl border border-white/5">
+                          {order.photos.map((photo, pIdx) => (
+                            <div key={pIdx} className="aspect-square rounded-xl overflow-hidden ring-1 ring-white/10 group cursor-pointer hover:ring-[#d4af37]/50 transition-all">
+                               <img src={`${R2_CONFIG.publicUrl}/${photo.r2_key_thumbnail}`} className="w-full h-full object-cover group-hover:scale-110 transition-transform" alt="" />
+                            </div>
+                          ))}
+                       </div>
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

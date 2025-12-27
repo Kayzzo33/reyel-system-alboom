@@ -14,6 +14,7 @@ export interface Client {
   email: string;
   telefone?: string;
   whatsapp?: string;
+  created_at?: string;
 }
 
 export interface Album {
@@ -30,10 +31,10 @@ export interface Album {
   permite_download: boolean;
   ativo: boolean;
   data_evento: string;
+  data_limite?: string;
   created_at: string;
   photo_count?: number;
-  // Added to support Supabase joined count results (e.g. .select('*, photos(count)'))
-  photos?: { count: number }[];
+  photos?: any[];
 }
 
 export interface Photo {
@@ -49,10 +50,20 @@ export interface Photo {
   ordem: number;
 }
 
+export interface Selection {
+  id: string;
+  album_id: string;
+  photo_id: string;
+  client_id: string;
+  created_at?: string;
+  photo?: Photo;
+}
+
+// Add OrderStatus and Order to resolve import errors in mockData.ts
 export enum OrderStatus {
   PENDING = 'pendente',
   PAID = 'pago',
-  CANCELLED = 'cancelado'
+  PROGRESS = 'andamento'
 }
 
 export interface Order {
@@ -66,11 +77,4 @@ export interface Order {
   valor_total: number;
   status: OrderStatus;
   created_at: string;
-}
-
-export interface Selection {
-  id: string;
-  album_id: string;
-  photo_id: string;
-  client_id: string;
 }
