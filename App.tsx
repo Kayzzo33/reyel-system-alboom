@@ -4,6 +4,7 @@ import Sidebar from './components/layout/Sidebar';
 import Dashboard from './views/admin/Dashboard';
 import Albums from './views/admin/Albums';
 import Clients from './views/admin/Clients';
+import Config from './views/admin/Config';
 import Login from './views/auth/Login';
 import { supabase } from './lib/supabase';
 
@@ -11,6 +12,7 @@ const App: React.FC = () => {
   const [session, setSession] = useState<any>(null);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [loading, setLoading] = useState(true);
+  const [autoOpenAlbumModal, setAutoOpenAlbumModal] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -40,6 +42,11 @@ const App: React.FC = () => {
     };
   }, []);
 
+  const handleNavigateToAlbums = (openModal = false) => {
+    setActiveTab('albums');
+    if (openModal) setAutoOpenAlbumModal(true);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#020617] gap-6">
@@ -61,20 +68,22 @@ const App: React.FC = () => {
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} onLogout={() => supabase.auth.signOut()} />
       <main className="flex-1 ml-64 p-8">
         <div className="max-w-7xl mx-auto">
-          {activeTab === 'dashboard' && <Dashboard />}
-          {activeTab === 'albums' && <Albums />}
+          {activeTab === 'dashboard' && (
+            <Dashboard onAction={() => handleNavigateToAlbums(true)} />
+          )}
+          {activeTab === 'albums' && (
+            <Albums 
+              initialOpenModal={autoOpenAlbumModal} 
+              onModalClose={() => setAutoOpenAlbumModal(false)} 
+            />
+          )}
           {activeTab === 'clients' && <Clients />}
           {activeTab === 'orders' && (
              <div className="h-[60vh] flex items-center justify-center bg-slate-900/50 rounded-[3rem] border border-slate-800">
                <p className="text-slate-500">Módulo de Pedidos em breve.</p>
              </div>
           )}
-          {activeTab === 'config' && (
-             <div className="p-8 bg-slate-900/50 rounded-[3rem] border border-slate-800">
-               <h2 className="text-2xl font-bold mb-4">Configurações</h2>
-               <p className="text-emerald-500 font-bold">R2 Storage Conectado</p>
-             </div>
-          )}
+          {activeTab === 'config' && <Config />}
         </div>
       </main>
     </div>

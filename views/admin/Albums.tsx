@@ -6,7 +6,12 @@ import { ICONS, COLORS } from '../../constants';
 import Button from '../../components/ui/Button';
 import { Album, Client } from '../../types';
 
-const Albums: React.FC = () => {
+interface AlbumsProps {
+  initialOpenModal?: boolean;
+  onModalClose?: () => void;
+}
+
+const Albums: React.FC<AlbumsProps> = ({ initialOpenModal, onModalClose }) => {
   const [albums, setAlbums] = useState<Album[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,7 +38,16 @@ const Albums: React.FC = () => {
   useEffect(() => {
     fetchAlbums();
     fetchClients();
-  }, []);
+    if (initialOpenModal) {
+      setStep(1);
+      setIsModalOpen(true);
+    }
+  }, [initialOpenModal]);
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    if (onModalClose) onModalClose();
+  };
 
   const fetchAlbums = async () => {
     try {
@@ -52,28 +66,33 @@ const Albums: React.FC = () => {
   };
 
   const handleCreateAlbum = async () => {
-    if (!newAlbum.nome || !newAlbum.client_id) {
-      alert('Preencha os campos obrigatórios.');
+    // Correção: client_id não é mais obrigatório para destravar a criação
+    if (!newAlbum.nome || !newAlbum.nome_galeria) {
+      alert('Por favor, defina o nome interno e o nome da galeria.');
       return;
     }
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      const { data, error } = await supabase.from('albums').insert([{
+      const payload = {
         ...newAlbum,
-        photographer_id: user?.id
-      }]).select().single();
+        photographer_id: user?.id,
+        // Se não houver cliente selecionado, envia null em vez de string vazia
+        client_id: newAlbum.client_id || null
+      };
+
+      const { data, error } = await supabase.from('albums').insert([payload]).select().single();
 
       if (error) throw error;
       setCreatedAlbumId(data.id);
       setStep(2);
     } catch (err) {
-      alert('Erro ao criar álbum');
+      console.error(err);
+      alert('Erro ao criar álbum. Verifique sua conexão.');
     }
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // Fix: Explicitly cast to File[] to avoid 'unknown' type errors during mapping and function calls
     const files = Array.from(e.target.files || []) as File[];
     const newQueue = files.map(f => ({
       fileName: f.name,
@@ -94,11 +113,10 @@ const Albums: React.FC = () => {
           updateQueueItem(file.name, { progress: p });
         });
 
-        // Registrar no Supabase
         await supabase.from('photos').insert([{
           album_id: createdAlbumId,
           r2_key_original: key,
-          r2_key_thumbnail: key, // Em produção, aqui seria a key do thumb gerado
+          r2_key_thumbnail: key,
           filename: file.name,
           tamanho_bytes: file.size,
           ordem: 0
@@ -235,13 +253,13 @@ const Albums: React.FC = () => {
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-500 uppercase ml-1">Vincular Cliente</label>
+                      <label className="text-xs font-bold text-slate-500 uppercase ml-1">Vincular Cliente (Opcional)</label>
                       <select 
                         className="w-full bg-slate-950 border border-white/5 rounded-2xl px-6 py-4 text-white focus:outline-none focus:ring-2 focus:ring-[#d4af37]/40 appearance-none cursor-pointer"
                         value={newAlbum.client_id}
                         onChange={(e) => setNewAlbum({...newAlbum, client_id: e.target.value})}
                       >
-                        <option value="">Selecione um cliente...</option>
+                        <option value="">Sem cliente vinculado...</option>
                         {clients.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
                       </select>
                     </div>
@@ -266,7 +284,7 @@ const Albums: React.FC = () => {
                 </div>
 
                 <div className="flex gap-4 pt-4">
-                  <Button variant="ghost" className="flex-1 py-4 rounded-2xl" onClick={() => setIsModalOpen(false)}>Cancelar</Button>
+                  <Button variant="ghost" className="flex-1 py-4 rounded-2xl" onClick={handleCloseModal}>Cancelar</Button>
                   <Button variant="primary" className="flex-1 py-4 rounded-2xl font-bold" onClick={handleCreateAlbum}>Próximo: Upload de Fotos</Button>
                 </div>
               </div>
@@ -318,7 +336,7 @@ const Albums: React.FC = () => {
                 )}
 
                 <div className="flex gap-4">
-                  <Button variant="primary" className="w-full py-4 rounded-2xl font-bold" onClick={() => setIsModalOpen(false)}>Concluir Álbum</Button>
+                  <Button variant="primary" className="w-full py-4 rounded-2xl font-bold" onClick={handleCloseModal}>Concluir Álbum</Button>
                 </div>
               </div>
             )}

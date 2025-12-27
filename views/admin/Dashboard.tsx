@@ -4,14 +4,17 @@ import { supabase } from '../../lib/supabase';
 import { ICONS } from '../../constants';
 import Button from '../../components/ui/Button';
 
-const Dashboard: React.FC = () => {
+interface DashboardProps {
+  onAction?: () => void;
+}
+
+const Dashboard: React.FC<DashboardProps> = ({ onAction }) => {
   const [counts, setCounts] = useState({ albums: 0, clients: 0, photos: 0, revenue: 0 });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchStats = async () => {
       setLoading(true);
-      // Busca contagens básicas do Supabase
       const { count: albumsCount } = await supabase.from('albums').select('*', { count: 'exact', head: true });
       const { count: clientsCount } = await supabase.from('clients').select('*', { count: 'exact', head: true });
       const { count: photosCount } = await supabase.from('photos').select('*', { count: 'exact', head: true });
@@ -20,7 +23,7 @@ const Dashboard: React.FC = () => {
         albums: albumsCount || 0,
         clients: clientsCount || 0,
         photos: photosCount || 0,
-        revenue: 0 // Implementaremos a soma de pedidos pagos futuramente
+        revenue: 0 
       });
       setLoading(false);
     };
@@ -46,7 +49,7 @@ const Dashboard: React.FC = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {stats.map((stat, idx) => (
-          <div key={idx} className="bg-slate-800/50 border border-slate-700 p-6 rounded-2xl flex items-center gap-4 shadow-xl">
+          <div key={idx} className="bg-slate-800/50 border border-slate-700 p-6 rounded-2xl flex items-center gap-4 shadow-xl hover:border-white/10 transition-colors">
             <div className={`p-4 rounded-xl ${stat.color}`}>
               {stat.icon}
             </div>
@@ -70,7 +73,7 @@ const Dashboard: React.FC = () => {
             Seus dados do Supabase estão conectados. Agora você pode criar um álbum e começar a subir suas fotos para o Cloudflare R2.
           </p>
         </div>
-        <Button variant="primary" className="px-8">Criar Novo Álbum agora</Button>
+        <Button variant="primary" className="px-8" onClick={onAction}>Criar Novo Álbum agora</Button>
       </div>
     </div>
   );
