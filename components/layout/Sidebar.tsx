@@ -6,9 +6,11 @@ interface SidebarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   onLogout?: () => void;
+  isOpen?: boolean;
+  onClose?: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogout }) => {
+const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogout, isOpen, onClose }) => {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: ICONS.Dashboard },
     { id: 'albums', label: 'Álbuns', icon: ICONS.Albums },
@@ -18,40 +20,60 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogout }) 
   ];
 
   return (
-    <div className="w-64 bg-slate-900 h-screen flex flex-col border-r border-slate-800 fixed left-0 top-0">
-      <div className="p-6">
-        <h1 className={`text-2xl font-bold text-[${COLORS.primary}] tracking-tight`}>
-          REYEL<span className="text-white font-light">PROD</span>
-        </h1>
-      </div>
+    <>
+      {/* Overlay para fechar no mobile ao clicar fora */}
+      {isOpen && (
+        <div 
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] lg:hidden transition-opacity"
+          onClick={onClose}
+        />
+      )}
 
-      <nav className="flex-1 px-4 py-4 space-y-1">
-        {menuItems.map((item) => (
-          <button
-            key={item.id}
-            onClick={() => setActiveTab(item.id)}
-            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 ${
-              activeTab === item.id 
-                ? `bg-[${COLORS.primary}] text-black shadow-md` 
-                : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            {item.icon}
-            <span className="font-medium">{item.label}</span>
+      <div className={`
+        fixed left-0 top-0 h-screen bg-slate-900 border-r border-white/5 z-[70] transition-transform duration-300
+        w-64 flex flex-col
+        ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+      `}>
+        <div className="p-8 flex items-center justify-between">
+          <h1 className="text-2xl font-black text-white tracking-tighter">
+            REYEL<span className="text-[#d4af37]">PROD</span>
+          </h1>
+          <button onClick={onClose} className="lg:hidden text-slate-500">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
           </button>
-        ))}
-      </nav>
+        </div>
 
-      <div className="p-4 border-t border-slate-800">
-        <button 
-          onClick={onLogout}
-          className="w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-slate-400 hover:bg-red-500/10 hover:text-red-500 transition-colors"
-        >
-          {ICONS.Logout}
-          <span className="font-medium">Sair</span>
-        </button>
+        <nav className="flex-1 px-4 py-4 space-y-2">
+          {menuItems.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => {
+                setActiveTab(item.id);
+                if (onClose) onClose();
+              }}
+              className={`w-full flex items-center space-x-4 px-5 py-4 rounded-2xl transition-all duration-300 ${
+                activeTab === item.id 
+                  ? 'bg-[#d4af37] text-black font-black shadow-xl shadow-[#d4af37]/10 scale-105' 
+                  : 'text-slate-500 hover:bg-white/5 hover:text-white'
+              }`}
+            >
+              <span className={activeTab === item.id ? 'text-black' : 'text-slate-500'}>{item.icon}</span>
+              <span className="text-sm uppercase tracking-widest font-black">{item.label}</span>
+            </button>
+          ))}
+        </nav>
+
+        <div className="p-6 border-t border-white/5">
+          <button 
+            onClick={onLogout}
+            className="w-full flex items-center space-x-4 px-5 py-4 rounded-2xl text-red-500/60 hover:bg-red-500 hover:text-white transition-all font-black uppercase text-[10px] tracking-widest"
+          >
+            {ICONS.Logout}
+            <span>Sair do Sistema</span>
+          </button>
+        </div>
       </div>
-    </div>
+    </>
   );
 };
 

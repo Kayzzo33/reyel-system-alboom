@@ -159,20 +159,33 @@ const PublicGallery: React.FC = () => {
     e.stopPropagation();
     try {
       setDownloading(photo.id);
-      const url = `${R2_CONFIG.publicUrl}/${photo.r2_key_original}`;
-      const response = await fetch(url, { mode: 'cors' });
+      // Adicionamos um timestamp aleatório para evitar que o navegador use uma versão em cache que pode ignorar headers de anexo
+      const url = `${R2_CONFIG.publicUrl}/${photo.r2_key_original}?t=${Date.now()}`;
+      
+      const response = await fetch(url, { 
+        mode: 'cors',
+        headers: { 'Content-Type': 'application/octet-stream' }
+      });
+
+      if (!response.ok) throw new Error("Erro na rede");
+
       const blob = await response.blob();
       const blobUrl = window.URL.createObjectURL(blob);
       
       const link = document.createElement('a');
       link.href = blobUrl;
-      link.download = photo.filename || `foto_${photo.id}.jpg`;
+      // Forçamos o nome do arquivo para garantir que o navegador entenda como download
+      link.download = photo.filename || `foto-reyel-${photo.id}.jpg`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      window.URL.revokeObjectURL(blobUrl);
+      
+      setTimeout(() => window.URL.revokeObjectURL(blobUrl), 100);
     } catch (err) {
-      window.open(`${R2_CONFIG.publicUrl}/${photo.r2_key_original}`, '_blank');
+      console.warn("CORS/Fetch error. Fallback para nova guia:", err);
+      // Se o CORS no R2 não estiver 100%, ele cai aqui
+      const url = `${R2_CONFIG.publicUrl}/${photo.r2_key_original}`;
+      window.open(url, '_blank');
     } finally {
       setDownloading(null);
     }
@@ -317,7 +330,7 @@ const PublicGallery: React.FC = () => {
               <input type="text" placeholder="WhatsApp (DDD + Número)" className="w-full bg-black border border-white/5 rounded-2xl md:rounded-3xl px-6 md:px-8 py-4 md:py-6 text-white text-sm md:text-base font-bold outline-none" value={clientForm.whatsapp} onChange={e => setClientForm({...clientForm, whatsapp: e.target.value})} />
             </div>
             <Button variant="primary" className="w-full py-5 md:py-7 rounded-2xl md:rounded-3xl font-black uppercase text-[10px] md:text-[11px] tracking-widest" isLoading={identifying} onClick={handleIdentification}>Acessar Galeria</Button>
-            <button className="text-slate-600 text-[9px] font-black uppercase tracking-widest hover:text-white transition-colors" onClick={() => setShowIdentModal(false)}>Voltar</button>
+            <button className="text-slate-600 text-[9px] font-black uppercase tracking-widest mt-4 hover:text-white transition-colors" onClick={() => setShowIdentModal(false)}>Voltar</button>
           </div>
         </div>
       )}
