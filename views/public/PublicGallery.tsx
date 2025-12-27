@@ -150,21 +150,37 @@ const PublicGallery: React.FC = () => {
     e.preventDefault();
     try {
       setDownloading(photo.id);
-      // Usamos timestamp para evitar cache do navegador que pode vir sem headers CORS
+      
+      // Adicionamos timestamp para evitar que o cache do navegador venha sem headers CORS
       const url = `${R2_CONFIG.publicUrl}/${photo.r2_key_original}?t=${new Date().getTime()}`;
       
       const response = await fetch(url);
       if (!response.ok) throw new Error('Network error');
       
       const blob = await response.blob();
-      const blobUrl = window.URL.createObjectURL(blob);
+      
+      // Criamos um novo Blob garantindo o tipo MIME correto para que o Mobile reconheça como mídia
+      const imageBlob = new Blob([blob], { type: 'image/jpeg' });
+      const blobUrl = window.URL.createObjectURL(imageBlob);
+      
       const link = document.createElement('a');
       link.href = blobUrl;
+      link.style.display = 'none';
       link.setAttribute('download', photo.filename || `foto_${photo.id}.jpg`);
+      
       document.body.appendChild(link);
       link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(blobUrl);
+      
+      // CRÍTICO PARA MOBILE: Delay na remoção do objeto e do link.
+      // Se removermos instantaneamente, o sistema de arquivos do mobile (Android/iOS)
+      // perde a referência antes de concluir a gravação física do arquivo.
+      setTimeout(() => {
+        if (document.body.contains(link)) {
+          document.body.removeChild(link);
+        }
+        window.URL.revokeObjectURL(blobUrl);
+      }, 2000);
+
     } catch (err) { 
       console.warn("Blob download failed, opening in new tab...", err);
       const url = `${R2_CONFIG.publicUrl}/${photo.r2_key_original}`;
