@@ -148,41 +148,56 @@ const PublicGallery: React.FC = () => {
   const forceDownload = async (e: React.MouseEvent, photo: Photo) => {
     e.stopPropagation();
     e.preventDefault();
+    
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const fileName = photo.filename?.toLowerCase().endsWith('.jpg') 
+      ? photo.filename 
+      : `${photo.filename || 'foto'}.jpg`;
+
     try {
       setDownloading(photo.id);
       
-      // Adicionamos timestamp para evitar que o cache do navegador venha sem headers CORS
       const url = `${R2_CONFIG.publicUrl}/${photo.r2_key_original}?t=${new Date().getTime()}`;
-      
       const response = await fetch(url);
       if (!response.ok) throw new Error('Network error');
-      
       const blob = await response.blob();
       
-      // Criamos um novo Blob garantindo o tipo MIME correto para que o Mobile reconheça como mídia
-      const imageBlob = new Blob([blob], { type: 'image/jpeg' });
-      const blobUrl = window.URL.createObjectURL(imageBlob);
-      
+      // Criamos o arquivo com tipo MIME explícito
+      const imageFile = new File([blob], fileName, { type: 'image/jpeg' });
+
+      // MÉTODO 1: SHARE API (Melhor para Mobile/Galeria)
+      if (isMobile && navigator.share && navigator.canShare && navigator.canShare({ files: [imageFile] })) {
+        await navigator.share({
+          files: [imageFile],
+          title: fileName,
+          text: 'Baixando foto da ReyelProduções'
+        });
+        setDownloading(null);
+        return;
+      }
+
+      // MÉTODO 2: BLOB DOWNLOAD (Desktop e Fallback Mobile)
+      const blobUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = blobUrl;
       link.style.display = 'none';
-      link.setAttribute('download', photo.filename || `foto_${photo.id}.jpg`);
+      link.setAttribute('download', fileName);
       
       document.body.appendChild(link);
       link.click();
       
-      // CRÍTICO PARA MOBILE: Delay na remoção do objeto e do link.
-      // Se removermos instantaneamente, o sistema de arquivos do mobile (Android/iOS)
-      // perde a referência antes de concluir a gravação física do arquivo.
+      // No Mobile, não revogamos a URL por um longo tempo para garantir que o "Abrir" do popup funcione
+      const revokeTime = isMobile ? 60000 : 5000;
+      
       setTimeout(() => {
         if (document.body.contains(link)) {
           document.body.removeChild(link);
         }
         window.URL.revokeObjectURL(blobUrl);
-      }, 2000);
+      }, revokeTime);
 
     } catch (err) { 
-      console.warn("Blob download failed, opening in new tab...", err);
+      console.warn("Download robusto falhou, tentando abertura direta...", err);
       const url = `${R2_CONFIG.publicUrl}/${photo.r2_key_original}`;
       window.open(url, '_blank'); 
     } finally { 
