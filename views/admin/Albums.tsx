@@ -1,7 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
-// Certifique-se de importar R2_CONFIG
 import { uploadPhotoToR2, UploadProgress, R2_CONFIG } from '../../lib/r2';
 import { ICONS, COLORS } from '../../constants';
 import Button from '../../components/ui/Button';
@@ -74,7 +73,7 @@ const Albums: React.FC<AlbumsProps> = ({ initialOpenModal, onModalClose }) => {
     setSelectedAlbum(album);
     setLoadingPhotos(true);
     try {
-      // Temporariamente removemos o order by created_at para evitar erro 400 antes do SQL ser rodado
+      // Removida a ordenação para evitar erro 400 caso o SQL ainda não tenha rodado
       const { data, error } = await supabase
         .from('photos')
         .select('*')

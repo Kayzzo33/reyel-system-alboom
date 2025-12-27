@@ -1,6 +1,6 @@
 
-// Importando o cliente principal e o comando
-import { S3Client, PutObjectCommand } from "https://esm.sh/@aws-sdk/client-s3@3.540.0";
+// Importando o SDK com flag específica para browser para evitar poluição de unenv/fs
+import { S3Client, PutObjectCommand } from "https://esm.sh/@aws-sdk/client-s3@3.540.0?target=browser";
 
 const getEnv = (key: string, fallback: string): string => {
   try {
@@ -34,21 +34,18 @@ export async function uploadPhotoToR2(
     const key = `albums/${albumId}/originals/${Date.now()}-${file.name.replace(/\s+/g, '_')}`;
     onProgress(10);
 
-    // CRITICAL: Forçamos o SDK a ignorar qualquer arquivo de configuração local
+    // CRITICAL FIX: Explicitamente força o modo 'standard' e passa credenciais diretas
+    // O SDK para browser não deve tentar carregar provedores de credenciais de arquivo
     const s3 = new S3Client({
       region: "auto",
       endpoint: `https://${R2_CONFIG.accountId}.r2.cloudflarestorage.com`,
       credentials: {
         accessKeyId: R2_CONFIG.accessKeyId,
         secretAccessKey: R2_CONFIG.secretAccessKey,
-      },
-      // Desativa explicitamente a detecção de ambiente Node/FS
-      customUserAgent: "reyel-browser-client",
-      forcePathStyle: true
+      }
     });
 
     const arrayBuffer = await file.arrayBuffer();
-    
     const command = new PutObjectCommand({
       Bucket: R2_CONFIG.bucketName,
       Key: key,
@@ -63,9 +60,9 @@ export async function uploadPhotoToR2(
     return { url, key };
   } catch (error: any) {
     console.error('R2 Upload Error:', error);
-    // Erro amigável se o ambiente ainda tentar carregar fs
+    // Se o erro ainda for sobre fs.readFile, significa que o esm.sh falhou no polyfill
     if (error.message?.includes('fs.readFile')) {
-       throw new Error("Erro de Inicialização do SDK: O navegador tentou carregar módulos de servidor. Verifique se as extensões do navegador não estão bloqueando o script.");
+       throw new Error("Erro de compatibilidade: O navegador tentou usar funções de servidor. Tente limpar o cache ou usar o Chrome/Edge atualizado.");
     }
     throw error;
   }
