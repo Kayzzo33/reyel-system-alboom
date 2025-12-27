@@ -11,10 +11,15 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
-      body { background-color: #020617; color: #f8fafc; margin: 0; font-family: 'Inter', sans-serif; }
+      body { background-color: #020617; color: #f8fafc; margin: 0; font-family: 'Inter', sans-serif; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none; }
       #root { min-height: 100vh; }
       @keyframes spin { to { transform: rotate(360deg); } }
       .loader-spin { animation: spin 1s linear infinite; }
+      
+      /* Proteção contra Print */
+      @media print {
+        body { display: none !important; }
+      }
     </style>
     
     <script type="importmap">
@@ -33,6 +38,14 @@
     <script type="module" src="./index.tsx"></script>
   </head>
   <body>
+    <noscript>
+      <div style="background: #020617; color: #d4af37; height: 100vh; display: flex; align-items: center; justify-content: center; text-align: center; padding: 20px; font-family: sans-serif;">
+        <div>
+          <h1 style="font-size: 24px; font-weight: bold;">JavaScript Desativado</h1>
+          <p style="margin-top: 10px; color: #64748b;">Para proteger a integridade das imagens e acessar a galeria, você precisa ativar o JavaScript em seu navegador.</p>
+        </div>
+      </div>
+    </noscript>
     <div id="root">
       <div id="app-loading-state" style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; gap:20px; background:#020617;">
         <div class="loader-spin" style="width:40px; height:40px; border:3px solid rgba(212,175,55,0.1); border-top-color:#d4af37; border-radius:50%;"></div>
