@@ -4,6 +4,7 @@ import Sidebar from './components/layout/Sidebar';
 import Dashboard from './views/admin/Dashboard';
 import Albums from './views/admin/Albums';
 import Clients from './views/admin/Clients';
+import Orders from './views/admin/Orders';
 import Config from './views/admin/Config';
 import Login from './views/auth/Login';
 import PublicGallery from './views/public/PublicGallery';
@@ -88,11 +89,7 @@ const App: React.FC = () => {
             />
           )}
           {activeTab === 'clients' && <Clients />}
-          {activeTab === 'orders' && (
-             <div className="h-[60vh] flex items-center justify-center bg-slate-900/50 rounded-[3rem] border border-slate-800">
-               <p className="text-slate-500">Módulo de Pedidos em breve.</p>
-             </div>
-          )}
+          {activeTab === 'orders' && <Orders />}
           {activeTab === 'config' && <Config />}
         </div>
       </main>

@@ -282,15 +282,15 @@ const PublicGallery: React.FC = () => {
                 </div>
               </div>
 
-              {/* Marca d'Água Dinâmica */}
+              {/* Marca d'Água Dinâmica - OPACIDADE AUMENTADA */}
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none overflow-hidden p-8">
                 {photographer?.marca_dagua_url ? (
                   <img 
                     src={photographer.marca_dagua_url} 
-                    className="w-full h-full object-contain opacity-20 filter grayscale contrast-150 rotate-[-15deg]"
+                    className="w-full h-full object-contain opacity-45 filter grayscale contrast-150 rotate-[-15deg] brightness-125"
                   />
                 ) : (
-                   <span className="text-4xl font-black tracking-[1rem] uppercase text-white/5 rotate-[-30deg]">ReyelProduções</span>
+                   <span className="text-4xl font-black tracking-[1rem] uppercase text-white/10 rotate-[-30deg]">ReyelProduções</span>
                 )}
               </div>
 
@@ -363,15 +363,15 @@ const PublicGallery: React.FC = () => {
               className="max-h-[80vh] max-w-full object-contain shadow-[0_0_80px_rgba(0,0,0,0.5)] rounded-lg animate-in zoom-in-95 duration-500"
             />
             
-            {/* Marca d'Água no Modal */}
+            {/* Marca d'Água no Modal - OPACIDADE AUMENTADA */}
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none p-12 overflow-hidden">
               {photographer?.marca_dagua_url ? (
                 <img 
                   src={photographer.marca_dagua_url} 
-                  className="w-1/2 h-1/2 object-contain opacity-15 filter grayscale contrast-150 rotate-[-15deg]"
+                  className="w-2/3 h-2/3 object-contain opacity-40 filter grayscale contrast-150 rotate-[-15deg] brightness-125"
                 />
               ) : (
-                <span className="text-6xl font-black tracking-[2rem] uppercase text-white/5 rotate-[-30deg]">ReyelProduções</span>
+                <span className="text-6xl font-black tracking-[2rem] uppercase text-white/10 rotate-[-30deg]">ReyelProduções</span>
               )}
             </div>
           </div>
