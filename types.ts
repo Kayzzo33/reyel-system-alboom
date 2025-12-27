@@ -7,6 +7,7 @@ export interface Profile {
   logo_url?: string;
   marca_dagua_url?: string;
   default_price_per_photo?: number;
+  pix_key?: string;
 }
 
 export interface Client {

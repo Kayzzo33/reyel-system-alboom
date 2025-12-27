@@ -11,6 +11,7 @@ const Config: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [defaultPrice, setDefaultPrice] = useState('15.00');
+  const [pixKey, setPixKey] = useState('');
   
   const logoInputRef = useRef<HTMLInputElement>(null);
   const watermarkInputRef = useRef<HTMLInputElement>(null);
@@ -27,17 +28,21 @@ const Config: React.FC = () => {
         let { data } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
         setProfile(data);
         if (data?.default_price_per_photo) setDefaultPrice(data.default_price_per_photo.toString());
+        if (data?.pix_key) setPixKey(data.pix_key);
       }
     } finally {
       setLoading(false);
     }
   };
 
-  const handleUpdatePrice = async () => {
+  const handleSaveConfig = async () => {
     if (!profile) return;
     try {
       setSaving(true);
-      await supabase.from('profiles').update({ default_price_per_photo: parseFloat(defaultPrice) }).eq('id', profile.id);
+      await supabase.from('profiles').update({ 
+        default_price_per_photo: parseFloat(defaultPrice),
+        pix_key: pixKey 
+      }).eq('id', profile.id);
       alert("Configurações salvas com sucesso!");
     } finally {
       setSaving(false);
@@ -105,18 +110,30 @@ const Config: React.FC = () => {
         </div>
 
         <div className="bg-slate-900 border border-white/5 rounded-[3rem] p-10 space-y-8 shadow-2xl">
-           <h3 className="text-xl font-black text-white">Valores Padrão</h3>
-           <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Preço Fixo por Foto (R$)</label>
-              <input 
-                type="number" 
-                className="w-full bg-black border border-white/5 rounded-2xl px-6 py-5 text-white font-bold text-xl"
-                value={defaultPrice}
-                onChange={(e) => setDefaultPrice(e.target.value)}
-              />
-              <p className="text-[10px] text-slate-600 font-medium ml-1">Este valor será sugerido automaticamente ao criar novos álbuns.</p>
+           <h3 className="text-xl font-black text-white">Financeiro e Vendas</h3>
+           <div className="space-y-6">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Preço Fixo por Foto (R$)</label>
+                <input 
+                  type="number" 
+                  className="w-full bg-black border border-white/5 rounded-2xl px-6 py-5 text-white font-bold text-xl"
+                  value={defaultPrice}
+                  onChange={(e) => setDefaultPrice(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Sua Chave PIX</label>
+                <input 
+                  type="text" 
+                  placeholder="E-mail, CPF ou Aleatória"
+                  className="w-full bg-black border border-white/5 rounded-2xl px-6 py-5 text-[#d4af37] font-bold"
+                  value={pixKey}
+                  onChange={(e) => setPixKey(e.target.value)}
+                />
+                <p className="text-[9px] text-slate-600 font-medium ml-1 uppercase tracking-widest">Será enviada automaticamente aos clientes no WhatsApp.</p>
+              </div>
            </div>
-           <Button variant="primary" className="w-full py-5 rounded-2xl font-black uppercase text-xs tracking-widest shadow-2xl shadow-[#d4af37]/10" isLoading={saving} onClick={handleUpdatePrice}>
+           <Button variant="primary" className="w-full py-5 rounded-2xl font-black uppercase text-xs tracking-widest shadow-2xl shadow-[#d4af37]/10" isLoading={saving} onClick={handleSaveConfig}>
              Salvar Configurações
            </Button>
         </div>
