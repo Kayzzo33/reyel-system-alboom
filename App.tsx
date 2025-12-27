@@ -54,10 +54,10 @@ const App: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[#020617] gap-6">
-        <div className="w-12 h-12 border-4 border-[#d4af37]/10 border-t-[#d4af37] rounded-full animate-spin"></div>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#000000] gap-6">
+        <div className="w-12 h-12 border-4 border-red-600/10 border-t-red-600 rounded-full animate-spin"></div>
         <div className="text-center">
-          <h2 className="text-[#d4af37] font-black tracking-[0.3em] uppercase text-[10px]">Reyel Produções</h2>
+          <h2 className="text-red-600 font-black tracking-[0.3em] uppercase text-[10px]">Reyel Produções</h2>
         </div>
       </div>
     );
@@ -68,10 +68,10 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="flex min-h-screen bg-[#020617] text-slate-100 overflow-x-hidden">
+    <div className="flex min-h-screen bg-[#000000] text-slate-100 overflow-x-hidden">
       {/* Menu Mobile superior */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 bg-slate-900/80 backdrop-blur-xl border-b border-white/5 z-50 p-4 flex justify-between items-center">
-        <h1 className="text-xl font-black text-white tracking-tighter">REYEL<span className="text-[#d4af37]">PROD</span></h1>
+      <div className="lg:hidden fixed top-0 left-0 right-0 bg-[#0a0a0a]/80 backdrop-blur-xl border-b border-white/5 z-50 p-4 flex justify-between items-center">
+        <h1 className="text-xl font-black text-white tracking-tighter">REYEL<span className="text-red-600">PROD</span></h1>
         <button 
           onClick={() => setIsSidebarOpen(true)}
           className="p-3 bg-white/5 rounded-xl text-white"

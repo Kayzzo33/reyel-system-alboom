@@ -15,10 +15,10 @@ const safeIcon = (iconName: string, size = 20) => {
 };
 
 export const COLORS = {
-  primary: '#d4af37',
-  secondary: '#1e293b',
-  bg: '#020617',
-  accent: '#3b82f6',
+  primary: '#ff0000',
+  secondary: '#0a0a0a',
+  bg: '#000000',
+  accent: '#ff3333',
   success: '#22c55e',
   danger: '#ef4444'
 };

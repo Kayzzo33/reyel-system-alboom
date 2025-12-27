@@ -43,7 +43,7 @@ const Config: React.FC = () => {
         default_price_per_photo: parseFloat(defaultPrice),
         pix_key: pixKey 
       }).eq('id', profile.id);
-      alert("Configurações salvas com sucesso!");
+      alert("Configurações salvas!");
     } finally {
       setSaving(false);
     }
@@ -65,76 +65,62 @@ const Config: React.FC = () => {
     }
   };
 
-  if (loading) return <div className="p-20 text-center text-slate-500 font-black">Carregando Configurações...</div>;
+  if (loading) return <div className="p-20 text-center text-slate-600 font-black uppercase text-xs">Sincronizando...</div>;
 
   return (
     <div className="space-y-8 pb-20">
       <header>
-        <h2 className="text-3xl font-black text-white tracking-tighter">Configurações</h2>
-        <p className="text-slate-500 font-medium">Branding e valores do seu estúdio.</p>
+        <h2 className="text-3xl font-black text-white tracking-tighter uppercase">Configurações</h2>
+        <p className="text-slate-500 font-medium">Controle de marca e financeiro.</p>
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="bg-slate-900 border border-white/5 rounded-[3rem] p-10 space-y-10 shadow-2xl">
-          <h3 className="text-xl font-black text-white">Identidade Visual</h3>
+        <div className="bg-[#0a0a0a] border border-white/5 rounded-[3rem] p-10 space-y-10 shadow-2xl">
+          <h3 className="text-xl font-black text-white uppercase tracking-tight">Identidade Visual</h3>
           
           <div className="grid gap-10">
             <div className="flex items-center gap-8 group">
               <div className="w-24 h-24 bg-black rounded-3xl border border-white/5 flex items-center justify-center overflow-hidden relative">
                 {profile?.logo_url ? <img src={profile.logo_url} className="w-full h-full object-contain p-4" /> : <span className="text-slate-800 font-black">LOGO</span>}
                 <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                   <button className="text-[10px] font-black text-[#d4af37]" onClick={() => logoInputRef.current?.click()}>MUDAR</button>
+                   <button className="text-[10px] font-black text-red-600 uppercase" onClick={() => logoInputRef.current?.click()}>Alterar</button>
                 </div>
               </div>
               <div className="space-y-2">
-                <h4 className="font-bold text-white uppercase text-xs tracking-widest">Logo Principal</h4>
+                <h4 className="font-bold text-white uppercase text-[10px] tracking-widest text-slate-500">Logo do Estúdio</h4>
                 <input type="file" hidden ref={logoInputRef} onChange={(e) => handleFileUpload(e, 'logo')} />
-                <Button variant="outline" size="sm" className="rounded-xl border-white/10" onClick={() => logoInputRef.current?.click()}>Alterar</Button>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-8 group">
-              <div className="w-24 h-24 bg-black rounded-3xl border border-white/5 flex items-center justify-center overflow-hidden relative">
-                {profile?.marca_dagua_url ? <img src={profile.marca_dagua_url} className="w-full h-full object-contain p-4 opacity-40" /> : <span className="text-slate-800 font-black">MARCA</span>}
-                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                   <button className="text-[10px] font-black text-[#d4af37]" onClick={() => watermarkInputRef.current?.click()}>MUDAR</button>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <h4 className="font-bold text-white uppercase text-xs tracking-widest">Marca D'água</h4>
-                <input type="file" hidden ref={watermarkInputRef} onChange={(e) => handleFileUpload(e, 'watermark')} />
-                <Button variant="outline" size="sm" className="rounded-xl border-white/10" onClick={() => watermarkInputRef.current?.click()}>Alterar</Button>
+                <Button variant="ghost" size="sm" className="rounded-xl border border-white/5" onClick={() => logoInputRef.current?.click()}>Subir Imagem</Button>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="bg-slate-900 border border-white/5 rounded-[3rem] p-10 space-y-8 shadow-2xl">
-           <h3 className="text-xl font-black text-white">Financeiro e Vendas</h3>
+        <div className="bg-[#0a0a0a] border border-white/5 rounded-[3rem] p-10 space-y-8 shadow-2xl">
+           <h3 className="text-xl font-black text-white uppercase tracking-tight">Financeiro</h3>
            <div className="space-y-6">
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Preço Fixo por Foto (R$)</label>
+                <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Preço/Foto (R$)</label>
                 <input 
                   type="number" 
-                  className="w-full bg-black border border-white/5 rounded-2xl px-6 py-5 text-white font-bold text-xl"
+                  className="w-full bg-black border border-white/5 rounded-2xl px-6 py-5 text-white font-bold text-xl outline-none focus:ring-1 focus:ring-red-600/30"
                   value={defaultPrice}
                   onChange={(e) => setDefaultPrice(e.target.value)}
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Sua Chave PIX</label>
+                <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Sua Chave PIX</label>
                 <input 
                   type="text" 
-                  placeholder="E-mail, CPF ou Aleatória"
-                  className="w-full bg-black border border-white/5 rounded-2xl px-6 py-5 text-[#d4af37] font-bold"
+                  placeholder="E-mail ou CPF"
+                  className="w-full bg-black border border-white/5 rounded-2xl px-6 py-5 text-emerald-500 font-black outline-none focus:ring-1 focus:ring-emerald-500/30"
                   value={pixKey}
                   onChange={(e) => setPixKey(e.target.value)}
                 />
-                <p className="text-[9px] text-slate-600 font-medium ml-1 uppercase tracking-widest">Será enviada automaticamente aos clientes no WhatsApp.</p>
+                <p className="text-[9px] text-slate-700 font-medium ml-1 uppercase tracking-widest">Enviada automaticamente ao cliente no checkout.</p>
               </div>
            </div>
-           <Button variant="primary" className="w-full py-5 rounded-2xl font-black uppercase text-xs tracking-widest shadow-2xl shadow-[#d4af37]/10" isLoading={saving} onClick={handleSaveConfig}>
-             Salvar Configurações
+           <Button variant="primary" className="w-full py-5 rounded-2xl font-black uppercase text-xs" isLoading={saving} onClick={handleSaveConfig}>
+             Salvar Dados
            </Button>
         </div>
       </div>
