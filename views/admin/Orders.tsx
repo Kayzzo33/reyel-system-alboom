@@ -46,7 +46,6 @@ const Orders: React.FC = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Força a busca de dados novos ignorando cache se possível
       const { data: selections, error } = await supabase
         .from('selections')
         .select(`
@@ -121,55 +120,58 @@ const Orders: React.FC = () => {
   const filteredOrders = orders.filter(o => activeTab === 'andamento' ? o.status === 'pendente' : o.status === 'pago');
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500 pb-20">
+    <div className="space-y-6 md:space-y-8 animate-in fade-in duration-500 pb-20">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div>
-          <h2 className="text-3xl font-black text-white tracking-tighter">Vendas e Seleções</h2>
-          <p className="text-slate-500 font-medium">Controle de faturamento em tempo real.</p>
+        <div className="text-center md:text-left">
+          <h2 className="text-2xl md:text-3xl font-black text-white tracking-tighter">Vendas e Seleções</h2>
+          <p className="text-slate-500 font-medium text-sm">Controle de faturamento em tempo real.</p>
         </div>
-        <div className="flex bg-slate-900 p-2 rounded-2xl border border-white/5 shadow-inner">
-           <button className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'andamento' ? 'bg-[#d4af37] text-black shadow-lg' : 'text-slate-500 hover:text-white'}`} onClick={() => setActiveTab('andamento')}>Pendentes ({orders.filter(o => o.status === 'pendente').length})</button>
-           <button className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'pago' ? 'bg-[#d4af37] text-black shadow-lg' : 'text-slate-500 hover:text-white'}`} onClick={() => setActiveTab('pago')}>Pagos ({orders.filter(o => o.status === 'pago').length})</button>
+        <div className="flex bg-slate-900 p-1.5 md:p-2 rounded-2xl border border-white/5 shadow-inner">
+           <button className={`flex-1 md:flex-none px-4 md:px-8 py-3 rounded-xl text-[9px] md:text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'andamento' ? 'bg-[#d4af37] text-black shadow-lg' : 'text-slate-500 hover:text-white'}`} onClick={() => setActiveTab('andamento')}>Pendentes ({orders.filter(o => o.status === 'pendente').length})</button>
+           <button className={`flex-1 md:flex-none px-4 md:px-8 py-3 rounded-xl text-[9px] md:text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'pago' ? 'bg-[#d4af37] text-black shadow-lg' : 'text-slate-500 hover:text-white'}`} onClick={() => setActiveTab('pago')}>Pagos ({orders.filter(o => o.status === 'pago').length})</button>
         </div>
       </header>
 
-      <div className="grid gap-6">
+      <div className="grid gap-4 md:gap-6">
         {filteredOrders.map((order) => {
           const isExpanded = expandedOrder === `${order.album_id}-${order.client_id}`;
           const currentPrice = profile?.default_price_per_photo || order.preco_por_foto;
           
           return (
-            <div key={`${order.album_id}-${order.client_id}`} className={`bg-slate-900 border border-white/5 rounded-[3rem] overflow-hidden transition-all duration-500 ${isExpanded ? 'ring-2 ring-[#d4af37]/20 shadow-3xl bg-slate-850' : 'hover:border-white/10'}`}>
-                <div className="p-10 flex flex-col md:flex-row items-center justify-between gap-8">
-                  <div className="flex items-center gap-6">
-                    <div className="w-16 h-16 bg-[#d4af37]/10 text-[#d4af37] rounded-2xl flex items-center justify-center font-black text-xl shadow-inner border border-[#d4af37]/10">{order.photo_count}</div>
-                    <div>
-                      <h3 className="text-xl font-black text-white tracking-tighter">{order.client_nome}</h3>
-                      <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest">{order.album_nome}</p>
+            <div key={`${order.album_id}-${order.client_id}`} className={`bg-slate-900 border border-white/5 rounded-[2rem] md:rounded-[3rem] overflow-hidden transition-all duration-500 ${isExpanded ? 'ring-2 ring-[#d4af37]/20 shadow-3xl' : 'hover:border-white/10'}`}>
+                <div className="p-6 md:p-10 flex flex-col md:flex-row items-center justify-between gap-6 md:gap-8">
+                  <div className="flex items-center gap-4 md:gap-6 w-full md:w-auto">
+                    <div className="w-12 h-12 md:w-16 md:h-16 bg-[#d4af37]/10 text-[#d4af37] rounded-xl md:rounded-2xl flex items-center justify-center font-black text-lg md:text-xl shadow-inner border border-[#d4af37]/10">{order.photo_count}</div>
+                    <div className="flex-1">
+                      <h3 className="text-lg md:text-xl font-black text-white tracking-tighter truncate max-w-[150px] md:max-w-none">{order.client_nome}</h3>
+                      <p className="text-[8px] md:text-[10px] text-slate-500 uppercase font-black tracking-widest truncate max-w-[150px] md:max-w-none">{order.album_nome}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-8">
-                    <div className="text-right">
-                       <p className="text-2xl font-black text-white tracking-tighter">{(order.photo_count * currentPrice).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
-                       <p className="text-[9px] text-slate-500 uppercase font-black tracking-widest">R$ {currentPrice.toFixed(2)} / foto</p>
+                  <div className="flex items-center justify-between md:justify-end w-full md:w-auto gap-4 md:gap-8 border-t border-white/5 md:border-none pt-4 md:pt-0">
+                    <div className="text-left md:text-right">
+                       <p className="text-xl md:text-2xl font-black text-white tracking-tighter">{(order.photo_count * currentPrice).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                       <p className="text-[8px] md:text-[9px] text-slate-500 uppercase font-black tracking-widest">R$ {currentPrice.toFixed(2)}/foto</p>
                     </div>
-                    <div className="flex gap-3">
-                       <button onClick={() => setExpandedOrder(isExpanded ? null : `${order.album_id}-${order.client_id}`)} className={`p-4 rounded-xl transition-all shadow-xl ${isExpanded ? 'bg-[#d4af37] text-black' : 'bg-slate-800 text-slate-400 hover:text-white'}`}>{ICONS.View}</button>
-                       <button onClick={() => openWhatsApp(order)} className="p-4 bg-emerald-500/10 text-emerald-500 rounded-xl hover:bg-emerald-500 hover:text-white transition-all shadow-xl">{ICONS.Orders}</button>
+                    <div className="flex gap-2 md:gap-3">
+                       <button onClick={() => setExpandedOrder(isExpanded ? null : `${order.album_id}-${order.client_id}`)} className={`p-3 md:p-4 rounded-xl transition-all ${isExpanded ? 'bg-[#d4af37] text-black' : 'bg-slate-800 text-slate-400 hover:text-white'}`}>{ICONS.View}</button>
+                       <button onClick={() => openWhatsApp(order)} className="p-3 md:p-4 bg-emerald-500/10 text-emerald-500 rounded-xl hover:bg-emerald-500 hover:text-white transition-all">{ICONS.Orders}</button>
                     </div>
                   </div>
                 </div>
                 {isExpanded && (
-                  <div className="px-10 pb-10 border-t border-white/5 pt-10 space-y-8 animate-in slide-in-from-top-4 duration-500">
-                     <div className="flex justify-between items-center bg-black/20 p-6 rounded-3xl">
-                        <p className="text-slate-400 text-sm font-bold">{order.client_email} • {order.client_whatsapp}</p>
-                        <Button variant="primary" className="rounded-xl px-8 font-black uppercase text-[10px] tracking-widest" onClick={() => handleUpdateStatus(order, order.status === 'pago' ? 'pendente' : 'pago')}>
-                          {order.status === 'pago' ? 'Revogar Acesso' : 'Aprovar e Liberar Downloads'}
+                  <div className="px-6 md:px-10 pb-10 border-t border-white/5 pt-6 md:pt-10 space-y-6 md:space-y-8 animate-in slide-in-from-top-4 duration-500">
+                     <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-black/20 p-4 md:p-6 rounded-2xl md:rounded-3xl">
+                        <div className="text-center md:text-left">
+                           <p className="text-slate-400 text-xs md:text-sm font-bold truncate max-w-[250px]">{order.client_email}</p>
+                           <p className="text-[#d4af37] text-xs font-black">{order.client_whatsapp}</p>
+                        </div>
+                        <Button variant="primary" className="w-full md:w-auto rounded-xl px-8 py-3 font-black uppercase text-[10px] tracking-widest" onClick={() => handleUpdateStatus(order, order.status === 'pago' ? 'pendente' : 'pago')}>
+                          {order.status === 'pago' ? 'Revogar Acesso' : 'Liberar Downloads'}
                         </Button>
                      </div>
-                     <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-4 bg-black/40 p-8 rounded-[3rem] border border-white/5">
+                     <div className="grid grid-cols-3 md:grid-cols-6 lg:grid-cols-8 gap-3 md:gap-4 bg-black/40 p-4 md:p-8 rounded-[1.5rem] md:rounded-[3rem] border border-white/5">
                         {order.photos.map(p => (
-                          <div key={p.id} className="aspect-square rounded-2xl overflow-hidden ring-1 ring-white/10 hover:ring-[#d4af37]/40 transition-all shadow-lg">
+                          <div key={p.id} className="aspect-square rounded-xl overflow-hidden ring-1 ring-white/10 shadow-lg">
                              <img src={`${R2_CONFIG.publicUrl}/${p.r2_key_thumbnail}`} className="w-full h-full object-cover" />
                           </div>
                         ))}
