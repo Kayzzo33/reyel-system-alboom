@@ -6,6 +6,7 @@ import Albums from './views/admin/Albums';
 import Clients from './views/admin/Clients';
 import Config from './views/admin/Config';
 import Login from './views/auth/Login';
+import PublicGallery from './views/public/PublicGallery';
 import { supabase } from './lib/supabase';
 
 const App: React.FC = () => {
@@ -13,6 +14,10 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [loading, setLoading] = useState(true);
   const [autoOpenAlbumModal, setAutoOpenAlbumModal] = useState(false);
+
+  // Verifica se o usuário está acessando uma galeria pública via URL (?gallery=TOKEN)
+  const queryParams = new URLSearchParams(window.location.search);
+  const galleryToken = queryParams.get('gallery');
 
   useEffect(() => {
     let active = true;
@@ -46,6 +51,11 @@ const App: React.FC = () => {
     setActiveTab('albums');
     if (openModal) setAutoOpenAlbumModal(true);
   };
+
+  // Se houver um token de galeria na URL, renderiza a visão do cliente
+  if (galleryToken) {
+    return <PublicGallery />;
+  }
 
   if (loading) {
     return (

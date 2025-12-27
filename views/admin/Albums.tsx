@@ -20,6 +20,7 @@ const Albums: React.FC<AlbumsProps> = ({ initialOpenModal, onModalClose }) => {
   const [selectedAlbum, setSelectedAlbum] = useState<Album | null>(null);
   const [albumPhotos, setAlbumPhotos] = useState<Photo[]>([]);
   const [loadingPhotos, setLoadingPhotos] = useState(false);
+  const [isCopied, setIsCopied] = useState(false);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [step, setStep] = useState(1);
@@ -73,7 +74,6 @@ const Albums: React.FC<AlbumsProps> = ({ initialOpenModal, onModalClose }) => {
     setSelectedAlbum(album);
     setLoadingPhotos(true);
     try {
-      // Agora que rodamos o SQL, podemos usar o order by com segurança
       const { data, error } = await supabase
         .from('photos')
         .select('*')
@@ -84,12 +84,19 @@ const Albums: React.FC<AlbumsProps> = ({ initialOpenModal, onModalClose }) => {
       setAlbumPhotos(data || []);
     } catch (err) {
       console.error("Erro ao carregar fotos do álbum:", err);
-      // Fallback caso o SQL ainda não tenha sido aplicado
       const { data } = await supabase.from('photos').select('*').eq('album_id', album.id);
       setAlbumPhotos(data || []);
     } finally {
       setLoadingPhotos(false);
     }
+  };
+
+  const handleShareAlbum = (album: Album) => {
+    const url = `${window.location.origin}${window.location.pathname}?gallery=${album.share_token}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setIsCopied(true);
+      setTimeout(() => setIsCopied(false), 3000);
+    });
   };
 
   const handleDeletePhoto = async (photoId: string) => {
@@ -213,8 +220,13 @@ const Albums: React.FC<AlbumsProps> = ({ initialOpenModal, onModalClose }) => {
                {ICONS.Plus} Add Fotos
              </Button>
              <input type="file" multiple hidden ref={fileInputRef} onChange={handleFileSelect} accept="image/*" />
-             <Button variant="primary" className="rounded-xl px-6 font-bold">
-               {ICONS.Share} Link do Cliente
+             <Button 
+                variant={isCopied ? "secondary" : "primary"} 
+                className={`rounded-xl px-6 font-bold transition-all duration-300 ${isCopied ? 'bg-emerald-500 text-white' : ''}`}
+                onClick={() => handleShareAlbum(selectedAlbum)}
+             >
+               {isCopied ? ICONS.Check : ICONS.Share} 
+               <span className="ml-2">{isCopied ? "Link Copiado!" : "Link do Cliente"}</span>
              </Button>
           </div>
         </header>

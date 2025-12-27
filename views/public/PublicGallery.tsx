@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
+import { R2_CONFIG } from '../../lib/r2';
 import { Album, Photo, Client } from '../../types';
 import { ICONS, COLORS } from '../../constants';
 import Button from '../../components/ui/Button';
@@ -33,12 +34,16 @@ const PublicGallery: React.FC = () => {
   const [clientForm, setClientForm] = useState({ nome: '', whatsapp: '' });
   const [identifying, setIdentifying] = useState(false);
 
-  // Extrair share_token da URL (em produção seria via rota, aqui simulamos)
-  const shareToken = window.location.pathname.split('/').pop() || 'demo';
+  // Extrair share_token da URL ou do parâmetro ?gallery=
+  const queryParams = new URLSearchParams(window.location.search);
+  const shareToken = queryParams.get('gallery') || window.location.pathname.split('/').pop() || '';
+  
   const { client, saveSession } = useClientSession(album?.id || 'default');
 
   useEffect(() => {
-    fetchAlbum();
+    if (shareToken) {
+      fetchAlbum();
+    }
   }, [shareToken]);
 
   const fetchAlbum = async () => {
@@ -54,11 +59,6 @@ const PublicGallery: React.FC = () => {
       if (error) throw error;
       setAlbum(data);
       setPhotos(data.photos || []);
-      
-      // Se não houver cliente na sessão, força identificação se ele tentar selecionar
-      if (!client) {
-        // Opcional: mostrar modal logo de cara ou apenas ao clicar em algo
-      }
     } catch (err) {
       console.error("Erro ao carregar galeria:", err);
     } finally {
@@ -75,23 +75,21 @@ const PublicGallery: React.FC = () => {
     try {
       setIdentifying(true);
       
-      // 1. Verificar se cliente já existe pelo WhatsApp
       let { data: existingClient } = await supabase
         .from('clients')
         .select('*')
         .eq('whatsapp', clientForm.whatsapp)
-        .single();
+        .maybeSingle();
 
       let finalClient = existingClient;
 
-      // 2. Se não existe, cria o cliente (vinculado ao fotógrafo do álbum)
       if (!existingClient && album) {
         const { data: newClient, error: createError } = await supabase
           .from('clients')
           .insert([{
             nome: clientForm.nome,
             whatsapp: clientForm.whatsapp,
-            email: `${clientForm.whatsapp}@cliente.com`, // Email dummy se necessário
+            email: `${clientForm.whatsapp}@cliente.com`,
             photographer_id: album.photographer_id
           }])
           .select()
@@ -101,7 +99,6 @@ const PublicGallery: React.FC = () => {
         finalClient = newClient;
       }
 
-      // 3. Salva na sessão local
       if (finalClient) {
         saveSession(finalClient);
         setShowIdentModal(false);
@@ -189,13 +186,12 @@ const PublicGallery: React.FC = () => {
               onClick={() => setViewingPhoto(photo)}
             >
               <img 
-                src={photo.r2_key_thumbnail} 
+                src={`${R2_CONFIG.publicUrl}/${photo.r2_key_thumbnail}`} 
                 alt={photo.filename}
                 className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110"
                 loading="lazy"
               />
               
-              {/* Botão de Seleção Flutuante */}
               <div 
                 className="absolute top-5 right-5 z-10"
                 onClick={(e) => {
@@ -212,12 +208,10 @@ const PublicGallery: React.FC = () => {
                 </div>
               </div>
 
-              {/* Marca D'água Dinâmica (Simulada no centro) */}
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.07] rotate-[-30deg] select-none">
                 <span className="text-4xl font-black tracking-[1rem] uppercase text-white">ReyelProduções</span>
               </div>
 
-              {/* Info Hover */}
               <div className="absolute inset-x-0 bottom-0 p-6 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
                 <p className="text-[10px] font-bold text-white/50 truncate">{photo.filename}</p>
               </div>
@@ -226,7 +220,6 @@ const PublicGallery: React.FC = () => {
         </div>
       </main>
 
-      {/* Modal de Identificação (O "Cadastro" do Cliente) */}
       {showIdentModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-black/95 backdrop-blur-xl animate-in fade-in duration-300">
           <div className="bg-slate-900 border border-white/10 w-full max-w-md rounded-[3rem] p-10 shadow-2xl text-center space-y-8">
@@ -263,7 +256,6 @@ const PublicGallery: React.FC = () => {
         </div>
       )}
 
-      {/* Fullscreen Photo Viewer */}
       {viewingPhoto && (
         <div className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-2xl flex flex-col items-center justify-center p-4 animate-in fade-in duration-300">
           <button 
@@ -276,7 +268,7 @@ const PublicGallery: React.FC = () => {
           </button>
 
           <img 
-            src={viewingPhoto.r2_key_original} 
+            src={`${R2_CONFIG.publicUrl}/${viewingPhoto.r2_key_original}`} 
             alt={viewingPhoto.filename}
             className="max-h-[80vh] max-w-full object-contain shadow-[0_0_80px_rgba(0,0,0,0.5)] rounded-lg animate-in zoom-in-95 duration-500"
           />
