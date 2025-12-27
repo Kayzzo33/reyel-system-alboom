@@ -147,18 +147,31 @@ const PublicGallery: React.FC = () => {
 
   const forceDownload = async (e: React.MouseEvent, photo: Photo) => {
     e.stopPropagation();
+    e.preventDefault();
     try {
       setDownloading(photo.id);
       const url = `${R2_CONFIG.publicUrl}/${photo.r2_key_original}`;
-      const response = await fetch(url);
+      
+      const response = await fetch(url, { mode: 'cors' });
+      if (!response.ok) throw new Error('Falha no fetch');
+      
       const blob = await response.blob();
       const blobUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = blobUrl;
       link.download = photo.filename;
+      document.body.appendChild(link);
       link.click();
+      document.body.removeChild(link);
       window.URL.revokeObjectURL(blobUrl);
-    } catch (err) { window.open(`${R2_CONFIG.publicUrl}/${photo.r2_key_original}`, '_blank'); } finally { setDownloading(null); }
+    } catch (err) { 
+      // Fallback: abrir em nova aba se o fetch falhar (CORS)
+      console.warn("Download direto falhou, tentando nova aba...", err);
+      const url = `${R2_CONFIG.publicUrl}/${photo.r2_key_original}`;
+      window.open(url, '_blank'); 
+    } finally { 
+      setDownloading(null); 
+    }
   };
 
   if (loading) return (

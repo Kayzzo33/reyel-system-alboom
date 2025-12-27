@@ -35,7 +35,10 @@ const Albums: React.FC<{ initialOpenModal?: boolean; onModalClose?: () => void }
   useEffect(() => {
     fetchAlbums();
     fetchProfile();
-    if (initialOpenModal) setIsModalOpen(true);
+    if (initialOpenModal) {
+      setIsModalOpen(true);
+      if (onModalClose) onModalClose();
+    }
   }, [initialOpenModal]);
 
   const fetchProfile = async () => {
@@ -97,6 +100,7 @@ const Albums: React.FC<{ initialOpenModal?: boolean; onModalClose?: () => void }
       if (error) throw error;
       setCreatedAlbumId(data.id);
       setStep(2);
+      fetchAlbums();
     } catch (err) { alert('Erro ao criar álbum'); }
   };
 
@@ -129,6 +133,10 @@ const Albums: React.FC<{ initialOpenModal?: boolean; onModalClose?: () => void }
     setUploadStatus(null);
     if (selectedAlbum) handleManageAlbum(selectedAlbum);
     fetchAlbums();
+    if (step === 2) {
+      setIsModalOpen(false);
+      setStep(1);
+    }
   };
 
   const handleDeleteAlbum = async (albumId: string) => {
@@ -223,6 +231,59 @@ const Albums: React.FC<{ initialOpenModal?: boolean; onModalClose?: () => void }
           </div>
         ))}
       </div>
+
+      {isModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-6 bg-black/90 backdrop-blur-xl animate-in fade-in duration-300">
+          <div className="bg-[#0a0a0a] border border-white/5 w-full max-w-2xl rounded-[3rem] p-8 md:p-12 shadow-3xl overflow-hidden relative">
+             <button onClick={() => setIsModalOpen(false)} className="absolute top-8 right-8 text-slate-500 hover:text-white">{ICONS.Back}</button>
+             
+             {step === 1 ? (
+               <div className="space-y-8">
+                 <div>
+                   <h3 className="text-2xl font-black text-white uppercase tracking-tighter">Novo Álbum</h3>
+                   <p className="text-slate-600 text-xs font-bold mt-2">Configure os detalhes da sua nova galeria.</p>
+                 </div>
+                 
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                   <div className="space-y-2">
+                     <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Nome Interno</label>
+                     <input type="text" placeholder="Ex: Casamento Maria & Joao" className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 text-white font-bold outline-none focus:ring-1 focus:ring-red-600/40" value={newAlbum.nome} onChange={e => setNewAlbum({...newAlbum, nome: e.target.value})} />
+                   </div>
+                   <div className="space-y-2">
+                     <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Nome na Galeria</label>
+                     <input type="text" placeholder="Ex: Wedding Day - M&J" className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 text-white font-bold outline-none focus:ring-1 focus:ring-red-600/40" value={newAlbum.nome_galeria} onChange={e => setNewAlbum({...newAlbum, nome_galeria: e.target.value})} />
+                   </div>
+                   <div className="space-y-2">
+                     <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Preço por Foto (R$)</label>
+                     <input type="number" className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 text-white font-bold outline-none focus:ring-1 focus:ring-red-600/40" value={newAlbum.preco_por_foto} onChange={e => setNewAlbum({...newAlbum, preco_por_foto: parseFloat(e.target.value)})} />
+                   </div>
+                   <div className="space-y-2">
+                     <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Max Seleções</label>
+                     <input type="number" className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 text-white font-bold outline-none focus:ring-1 focus:ring-red-600/40" value={newAlbum.max_selecoes} onChange={e => setNewAlbum({...newAlbum, max_selecoes: parseInt(e.target.value)})} />
+                   </div>
+                 </div>
+                 
+                 <Button variant="primary" className="w-full py-5 rounded-2xl font-black uppercase text-xs" onClick={handleCreateAlbum}>Próximo Passo: Fotos</Button>
+               </div>
+             ) : (
+               <div className="space-y-8 text-center py-10">
+                 <div className="w-24 h-24 bg-red-600/10 rounded-full flex items-center justify-center mx-auto mb-6 text-red-600 border border-red-600/20">
+                   {ICONS.Photo}
+                 </div>
+                 <div>
+                   <h3 className="text-2xl font-black text-white uppercase tracking-tighter">Hora do Upload</h3>
+                   <p className="text-slate-600 text-xs font-bold mt-2">Selecione as fotos do seu computador.</p>
+                 </div>
+                 <input type="file" multiple hidden ref={fileInputRef} onChange={handleFileSelect} accept="image/*" />
+                 <Button variant="primary" className="w-full py-6 rounded-2xl font-black uppercase text-xs" onClick={() => fileInputRef.current?.click()} isLoading={!!uploadStatus}>
+                   {uploadStatus || 'Selecionar Arquivos'}
+                 </Button>
+                 <p className="text-[9px] text-slate-700 font-black uppercase tracking-widest">Formatos aceitos: JPG, PNG, WEBP</p>
+               </div>
+             )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
