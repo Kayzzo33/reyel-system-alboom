@@ -22,11 +22,10 @@ const Albums: React.FC<{ initialOpenModal?: boolean; onModalClose?: () => void }
   const [newAlbum, setNewAlbum] = useState({
     nome: '',
     nome_galeria: '',
-    categoria: 'Wedding',
+    categoria: 'Event',
     preco_por_foto: 15,
     max_selecoes: 50,
     data_evento: new Date().toISOString().split('T')[0],
-    data_limite: ''
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -101,7 +100,10 @@ const Albums: React.FC<{ initialOpenModal?: boolean; onModalClose?: () => void }
       setCreatedAlbumId(data.id);
       setStep(2);
       fetchAlbums();
-    } catch (err) { alert('Erro ao criar álbum'); }
+    } catch (err) { 
+      console.error(err);
+      alert('Erro ao criar álbum. Verifique os campos.'); 
+    }
   };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -194,12 +196,11 @@ const Albums: React.FC<{ initialOpenModal?: boolean; onModalClose?: () => void }
           {loadingPhotos ? (
             [1, 2, 3, 4, 5, 6].map(i => <div key={i} className="aspect-square bg-[#0a0a0a] rounded-2xl animate-pulse border border-white/5"></div>)
           ) : albumPhotos.map((photo) => (
-            <div key={photo.id} className="group relative aspect-square bg-[#0a0a0a] rounded-2xl md:rounded-3xl overflow-hidden border border-white/5 shadow-2xl transition-all hover:border-red-500/30" style={{ contentVisibility: 'auto', containIntrinsicSize: '200px' }}>
+            <div key={photo.id} className="group relative aspect-square bg-[#0a0a0a] rounded-2xl md:rounded-3xl overflow-hidden border border-white/5 shadow-2xl transition-all hover:border-red-500/30">
               <img 
                 src={`${R2_CONFIG.publicUrl}/${photo.r2_key_thumbnail}`} 
                 className="w-full h-full object-cover will-change-transform" 
                 loading="lazy"
-                decoding="async"
               />
             </div>
           ))}
@@ -260,6 +261,20 @@ const Albums: React.FC<{ initialOpenModal?: boolean; onModalClose?: () => void }
                    <div className="space-y-2">
                      <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Max Seleções</label>
                      <input type="number" className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 text-white font-bold outline-none focus:ring-1 focus:ring-red-600/40" value={newAlbum.max_selecoes} onChange={e => setNewAlbum({...newAlbum, max_selecoes: parseInt(e.target.value)})} />
+                   </div>
+                   <div className="space-y-2">
+                     <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Categoria</label>
+                     <select className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 text-white font-bold outline-none focus:ring-1 focus:ring-red-600/40 appearance-none" value={newAlbum.categoria} onChange={e => setNewAlbum({...newAlbum, categoria: e.target.value})}>
+                       <option value="Event">Evento Social</option>
+                       <option value="Wedding">Casamento</option>
+                       <option value="Session">Ensaio</option>
+                       <option value="Corporate">Corporativo</option>
+                       <option value="Other">Outros</option>
+                     </select>
+                   </div>
+                   <div className="space-y-2">
+                     <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Data do Evento</label>
+                     <input type="date" className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 text-white font-bold outline-none focus:ring-1 focus:ring-red-600/40" value={newAlbum.data_evento} onChange={e => setNewAlbum({...newAlbum, data_evento: e.target.value})} />
                    </div>
                  </div>
                  

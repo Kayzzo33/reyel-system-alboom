@@ -150,23 +150,23 @@ const PublicGallery: React.FC = () => {
     e.preventDefault();
     try {
       setDownloading(photo.id);
-      const url = `${R2_CONFIG.publicUrl}/${photo.r2_key_original}`;
+      // Usamos timestamp para evitar cache do navegador que pode vir sem headers CORS
+      const url = `${R2_CONFIG.publicUrl}/${photo.r2_key_original}?t=${new Date().getTime()}`;
       
-      const response = await fetch(url, { mode: 'cors' });
-      if (!response.ok) throw new Error('Falha no fetch');
+      const response = await fetch(url);
+      if (!response.ok) throw new Error('Network error');
       
       const blob = await response.blob();
       const blobUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = blobUrl;
-      link.download = photo.filename;
+      link.setAttribute('download', photo.filename || `foto_${photo.id}.jpg`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(blobUrl);
     } catch (err) { 
-      // Fallback: abrir em nova aba se o fetch falhar (CORS)
-      console.warn("Download direto falhou, tentando nova aba...", err);
+      console.warn("Blob download failed, opening in new tab...", err);
       const url = `${R2_CONFIG.publicUrl}/${photo.r2_key_original}`;
       window.open(url, '_blank'); 
     } finally { 
@@ -206,22 +206,23 @@ const PublicGallery: React.FC = () => {
            
            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6 md:gap-10">
               {selectedPhotoList.map(photo => (
-                <div key={photo.id} className="relative aspect-[3/4] rounded-3xl overflow-hidden group border border-white/5 shadow-3xl bg-[#0a0a0a]" style={{ contentVisibility: 'auto', containIntrinsicSize: '300px' }}>
-                   <img src={`${R2_CONFIG.publicUrl}/${photo.r2_key_thumbnail}`} className="w-full h-full object-cover will-change-transform" alt="" loading="lazy" decoding="async" />
+                <div key={photo.id} className="relative aspect-[3/4] rounded-3xl overflow-hidden group border border-white/5 shadow-3xl bg-[#0a0a0a]">
+                   <img src={`${R2_CONFIG.publicUrl}/${photo.r2_key_thumbnail}`} className="w-full h-full object-cover" alt="" loading="lazy" />
                    
-                   {paymentStatus === 'pago' ? (
+                   {paymentStatus === 'pago' && (
                      <button 
                        onClick={(e) => forceDownload(e, photo)} 
                        className="absolute bottom-4 right-4 w-12 h-12 bg-red-600 text-white rounded-2xl flex items-center justify-center shadow-2xl hover:scale-110 active:scale-95 transition-all z-50 border border-white/10"
                      >
                         {downloading === photo.id ? <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></div> : ICONS.Download}
                      </button>
-                   ) : (
+                   )}
+                   
+                   {paymentStatus !== 'pago' && (
                      <div className="absolute inset-0 flex items-center justify-center opacity-40 grayscale pointer-events-none p-6 rotate-[-20deg]">
                         {photographer?.marca_dagua_url ? <img src={photographer.marca_dagua_url} className="w-full h-full object-contain" /> : <span className="text-white font-black text-sm tracking-[0.3em] uppercase opacity-20">Protegido</span>}
                      </div>
                    )}
-                   <div className="absolute inset-0 z-10 bg-transparent"></div>
                 </div>
               ))}
            </div>
@@ -271,10 +272,9 @@ const PublicGallery: React.FC = () => {
           <div 
             key={photo.id} 
             className={`relative aspect-[3/4] bg-[#0a0a0a] rounded-3xl overflow-hidden cursor-pointer group shadow-2xl transition-all duration-500 ring-1 ${selectedPhotos.has(photo.id) ? 'ring-red-600 scale-105' : 'ring-white/5'}`}
-            style={{ contentVisibility: 'auto', containIntrinsicSize: '400px' }}
             onClick={() => setViewingPhoto(photo)}
           >
-             <img src={`${R2_CONFIG.publicUrl}/${photo.r2_key_thumbnail}`} className="w-full h-full object-cover will-change-transform" loading="lazy" decoding="async" />
+             <img src={`${R2_CONFIG.publicUrl}/${photo.r2_key_thumbnail}`} className="w-full h-full object-cover" loading="lazy" />
              
              <div className="absolute top-4 right-4 md:top-8 md:right-8 z-40" onClick={(e) => { 
                e.stopPropagation(); 
@@ -295,7 +295,6 @@ const PublicGallery: React.FC = () => {
              <div className="absolute inset-0 flex items-center justify-center opacity-20 pointer-events-none p-10 rotate-[-20deg] grayscale contrast-200">
                 {photographer?.marca_dagua_url ? <img src={photographer.marca_dagua_url} className="w-full h-full object-contain" /> : <span className="text-white/5 font-black text-2xl uppercase tracking-[1em]">REYEL</span>}
              </div>
-             <div className="absolute inset-0 bg-transparent z-20"></div>
           </div>
         ))}
       </main>
@@ -322,11 +321,10 @@ const PublicGallery: React.FC = () => {
         <div className="fixed inset-0 z-[110] bg-black/99 backdrop-blur-3xl flex flex-col items-center justify-center p-4 animate-in fade-in duration-500">
           <button className="absolute top-8 right-8 p-4 text-white/40 hover:text-white font-black text-[10px] tracking-widest uppercase" onClick={() => setViewingPhoto(null)}>Fechar Visualização</button>
           <div className="relative max-h-[75vh] md:max-h-[85vh] rounded-[2rem] overflow-hidden border border-white/5 shadow-3xl">
-            <img src={`${R2_CONFIG.publicUrl}/${viewingPhoto.r2_key_original}`} className="max-h-[75vh] md:max-h-[85vh] object-contain pointer-events-none will-change-transform" decoding="async" />
+            <img src={`${R2_CONFIG.publicUrl}/${viewingPhoto.r2_key_original}`} className="max-h-[75vh] md:max-h-[85vh] object-contain pointer-events-none" />
             <div className="absolute inset-0 flex items-center justify-center opacity-30 p-20 rotate-[-15deg] grayscale contrast-150 pointer-events-none">
               {photographer?.marca_dagua_url ? <img src={photographer.marca_dagua_url} className="w-full h-full object-contain" /> : <span className="text-white/5 font-black text-6xl uppercase tracking-[1em]">PROTEGIDO</span>}
             </div>
-            <div className="absolute inset-0 bg-transparent z-40"></div>
           </div>
           <div className="mt-12">
              <Button 
