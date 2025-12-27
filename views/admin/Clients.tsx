@@ -45,27 +45,36 @@ const Clients: React.FC = () => {
         return;
       }
 
-      console.log("Tentando salvar cliente para o fotógrafo:", user.id);
-      
-      const { error } = await supabase.from('clients').insert([{
+      console.log("Iniciando inserção de cliente...");
+      const payload = {
         nome: newClient.nome,
         email: newClient.email,
         whatsapp: newClient.whatsapp,
         photographer_id: user.id
-      }]);
+      };
+      
+      console.log("Payload enviado:", payload);
+      
+      const { data, error } = await supabase.from('clients').insert([payload]).select();
 
       if (error) {
-        console.error("ERRO SUPABASE AO SALVAR CLIENTE:", error);
-        throw new Error(error.message);
+        console.error("ERRO SUPABASE (RLS ou Schema):", error);
+        throw error;
       }
 
+      console.log("Cliente salvo com sucesso:", data);
       setIsModalOpen(false);
       setNewClient({ nome: '', email: '', whatsapp: '' });
       fetchClients();
-      alert("Cliente cadastrado com sucesso!");
+      alert("Cliente cadastrado!");
     } catch (err: any) {
-      console.error("Erro detalhado:", err);
-      alert(`Erro ao salvar cliente: ${err.message || 'Verifique o console para detalhes.'}`);
+      console.error("Erro detalhado no handleSaveClient:", err);
+      // Se for erro de RLS, dar uma dica ao usuário
+      if (err.code === '42501') {
+        alert("Erro de Permissão (RLS): O banco de dados bloqueou o cadastro. Verifique as políticas de segurança da tabela 'clients' no Supabase.");
+      } else {
+        alert(`Erro ao salvar: ${err.message || 'Erro desconhecido'}`);
+      }
     } finally {
       setSaving(false);
     }
@@ -80,8 +89,8 @@ const Clients: React.FC = () => {
     <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-500">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold text-white">Seus Clientes</h2>
-          <p className="text-slate-400">Gerencie sua base de contatos para vincular aos álbuns.</p>
+          <h2 className="text-3xl font-bold text-white tracking-tight">Clientes</h2>
+          <p className="text-slate-400">Base de contatos e histórico de seleções.</p>
         </div>
         <div className="flex gap-4">
           <div className="relative group">
@@ -91,51 +100,51 @@ const Clients: React.FC = () => {
               placeholder="Buscar cliente..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-[#d4af37]/50 w-full md:w-64 transition-all"
+              className="pl-10 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-[#d4af37]/50 w-full md:w-64 transition-all"
             />
           </div>
-          <Button variant="primary" className="flex items-center gap-2" onClick={() => setIsModalOpen(true)}>
+          <Button variant="primary" className="rounded-xl px-6" onClick={() => setIsModalOpen(true)}>
             {ICONS.Plus} Novo Cliente
           </Button>
         </div>
       </header>
 
       {loading ? (
-        <div className="space-y-4">
-          {[1, 2, 3].map(i => <div key={i} className="h-16 bg-slate-800/50 rounded-xl animate-pulse"></div>)}
+        <div className="grid gap-4">
+          {[1, 2, 3].map(i => <div key={i} className="h-20 bg-slate-900 border border-slate-800 rounded-2xl animate-pulse"></div>)}
         </div>
       ) : (
-        <div className="bg-slate-900/50 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl">
+        <div className="bg-slate-900/50 border border-slate-800 rounded-[2rem] overflow-hidden shadow-2xl">
           <table className="w-full text-left">
-            <thead className="bg-slate-950/50 border-b border-slate-800">
+            <thead className="bg-slate-950/50 border-b border-white/5">
               <tr>
-                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">Nome</th>
-                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">E-mail</th>
-                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase">WhatsApp</th>
-                <th className="px-6 py-4 text-right text-xs font-bold text-slate-500 uppercase">Ações</th>
+                <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">Nome</th>
+                <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">E-mail</th>
+                <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">WhatsApp</th>
+                <th className="px-8 py-5 text-right text-[10px] font-black text-slate-500 uppercase tracking-widest">Ações</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800">
+            <tbody className="divide-y divide-white/5">
               {filteredClients.map((client) => (
-                <tr key={client.id} className="hover:bg-white/5 transition-colors group">
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-xl bg-[#d4af37]/10 text-[#d4af37] flex items-center justify-center font-bold text-sm">
+                <tr key={client.id} className="hover:bg-white/[0.02] transition-colors group">
+                  <td className="px-8 py-5">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-xl bg-[#d4af37]/10 text-[#d4af37] flex items-center justify-center font-black text-xs ring-1 ring-[#d4af37]/20">
                         {client.nome.charAt(0)}
                       </div>
-                      <span className="text-sm font-semibold text-white">{client.nome}</span>
+                      <span className="text-sm font-bold text-white">{client.nome}</span>
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-sm text-slate-400">{client.email}</td>
-                  <td className="px-6 py-4 text-sm text-slate-400">{client.whatsapp || '--'}</td>
-                  <td className="px-6 py-4 text-right">
-                    <button className="p-2 text-slate-500 hover:text-white transition-colors">{ICONS.View}</button>
+                  <td className="px-8 py-5 text-sm text-slate-400 font-medium">{client.email}</td>
+                  <td className="px-8 py-5 text-sm text-slate-400 font-medium">{client.whatsapp || '--'}</td>
+                  <td className="px-8 py-5 text-right">
+                    <button className="p-2 text-slate-500 hover:text-white transition-colors hover:bg-white/5 rounded-lg">{ICONS.View}</button>
                   </td>
                 </tr>
               ))}
               {filteredClients.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-6 py-12 text-center text-slate-500 italic">Nenhum cliente cadastrado ainda.</td>
+                  <td colSpan={4} className="px-8 py-16 text-center text-slate-600 italic font-medium">Nenhum cliente encontrado.</td>
                 </tr>
               )}
             </tbody>
@@ -144,35 +153,39 @@ const Clients: React.FC = () => {
       )}
 
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-slate-900 border border-white/10 w-full max-w-md rounded-[2.5rem] p-10 shadow-2xl">
-            <h3 className="text-2xl font-bold text-white mb-6 tracking-tight">Cadastrar Cliente</h3>
-            <div className="space-y-5">
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-500 uppercase ml-1">Nome Completo</label>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="bg-slate-900 border border-white/10 w-full max-w-md rounded-[3rem] p-10 shadow-2xl">
+            <div className="mb-8">
+              <h3 className="text-2xl font-black text-white tracking-tighter">Novo Cliente</h3>
+              <p className="text-slate-500 text-sm mt-1 font-medium">Cadastre os dados para vincular aos álbuns.</p>
+            </div>
+            
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Nome Completo</label>
                 <input 
                   type="text" 
-                  className="w-full bg-slate-950 border border-white/5 rounded-2xl px-5 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#d4af37]/40"
+                  className="w-full bg-slate-950 border border-white/5 rounded-2xl px-6 py-4 text-white focus:outline-none focus:ring-2 focus:ring-[#d4af37]/40 placeholder-slate-700 font-bold"
                   value={newClient.nome}
                   onChange={(e) => setNewClient({...newClient, nome: e.target.value})}
-                  placeholder="Nome do cliente"
+                  placeholder="Ex: Maria Oliveira"
                 />
               </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-500 uppercase ml-1">E-mail</label>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">E-mail</label>
                 <input 
                   type="email" 
-                  className="w-full bg-slate-950 border border-white/5 rounded-2xl px-5 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#d4af37]/40"
+                  className="w-full bg-slate-950 border border-white/5 rounded-2xl px-6 py-4 text-white focus:outline-none focus:ring-2 focus:ring-[#d4af37]/40 placeholder-slate-700 font-bold"
                   value={newClient.email}
                   onChange={(e) => setNewClient({...newClient, email: e.target.value})}
-                  placeholder="cliente@email.com"
+                  placeholder="maria@exemplo.com"
                 />
               </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-500 uppercase ml-1">WhatsApp</label>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">WhatsApp</label>
                 <input 
                   type="text" 
-                  className="w-full bg-slate-950 border border-white/5 rounded-2xl px-5 py-3 text-white focus:outline-none focus:ring-2 focus:ring-[#d4af37]/40"
+                  className="w-full bg-slate-950 border border-white/5 rounded-2xl px-6 py-4 text-white focus:outline-none focus:ring-2 focus:ring-[#d4af37]/40 placeholder-slate-700 font-bold"
                   placeholder="(00) 00000-0000"
                   value={newClient.whatsapp}
                   onChange={(e) => setNewClient({...newClient, whatsapp: e.target.value})}
@@ -180,8 +193,8 @@ const Clients: React.FC = () => {
               </div>
             </div>
             <div className="flex gap-4 mt-10">
-              <Button variant="ghost" className="flex-1 rounded-2xl" onClick={() => setIsModalOpen(false)}>Cancelar</Button>
-              <Button variant="primary" className="flex-1 rounded-2xl font-bold" isLoading={saving} onClick={handleSaveClient}>Salvar Cliente</Button>
+              <Button variant="ghost" className="flex-1 rounded-2xl py-4" onClick={() => setIsModalOpen(false)}>Cancelar</Button>
+              <Button variant="primary" className="flex-1 rounded-2xl font-bold py-4" isLoading={saving} onClick={handleSaveClient}>Salvar</Button>
             </div>
           </div>
         </div>
