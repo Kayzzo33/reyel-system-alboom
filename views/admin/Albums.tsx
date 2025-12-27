@@ -55,6 +55,8 @@ const Albums: React.FC<AlbumsProps> = ({ initialOpenModal, onModalClose }) => {
       const { data, error } = await supabase.from('albums').select('*, photos(count)').order('created_at', { ascending: false });
       if (error) throw error;
       setAlbums(data || []);
+    } catch (err) {
+      console.error("Erro ao buscar álbuns:", err);
     } finally {
       setLoading(false);
     }
@@ -66,7 +68,6 @@ const Albums: React.FC<AlbumsProps> = ({ initialOpenModal, onModalClose }) => {
   };
 
   const handleCreateAlbum = async () => {
-    // Correção: client_id não é mais obrigatório para destravar a criação
     if (!newAlbum.nome || !newAlbum.nome_galeria) {
       alert('Por favor, defina o nome interno e o nome da galeria.');
       return;
@@ -74,21 +75,35 @@ const Albums: React.FC<AlbumsProps> = ({ initialOpenModal, onModalClose }) => {
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Usuário não autenticado.");
+
       const payload = {
-        ...newAlbum,
-        photographer_id: user?.id,
-        // Se não houver cliente selecionado, envia null em vez de string vazia
-        client_id: newAlbum.client_id || null
+        nome: newAlbum.nome,
+        nome_galeria: newAlbum.nome_galeria,
+        categoria: newAlbum.categoria,
+        preco_por_foto: newAlbum.preco_por_foto,
+        max_selecoes: newAlbum.max_selecoes,
+        data_evento: newAlbum.data_evento,
+        photographer_id: user.id,
+        share_token: Math.random().toString(36).substring(2, 10), // Token aleatório simples
+        client_id: newAlbum.client_id || null,
+        ativo: true,
+        permite_download: false
       };
 
+      console.log("Tentando criar álbum com payload:", payload);
       const { data, error } = await supabase.from('albums').insert([payload]).select().single();
 
-      if (error) throw error;
+      if (error) {
+        console.error("Erro Supabase ao criar álbum:", error);
+        throw error;
+      }
+
       setCreatedAlbumId(data.id);
       setStep(2);
-    } catch (err) {
-      console.error(err);
-      alert('Erro ao criar álbum. Verifique sua conexão.');
+    } catch (err: any) {
+      console.error("Erro completo handleCreateAlbum:", err);
+      alert(`Erro ao criar álbum: ${err.message || 'Verifique sua conexão ou permissões RLS.'}`);
     }
   };
 
@@ -113,7 +128,7 @@ const Albums: React.FC<AlbumsProps> = ({ initialOpenModal, onModalClose }) => {
           updateQueueItem(file.name, { progress: p });
         });
 
-        await supabase.from('photos').insert([{
+        const { error: dbError } = await supabase.from('photos').insert([{
           album_id: createdAlbumId,
           r2_key_original: key,
           r2_key_thumbnail: key,
@@ -122,8 +137,11 @@ const Albums: React.FC<AlbumsProps> = ({ initialOpenModal, onModalClose }) => {
           ordem: 0
         }]);
 
+        if (dbError) throw dbError;
+
         updateQueueItem(file.name, { status: 'completed', url });
-      } catch (err) {
+      } catch (err: any) {
+        console.error("Falha no upload/registro da foto:", file.name, err);
         updateQueueItem(file.name, { status: 'error' });
       }
     }
@@ -185,11 +203,6 @@ const Albums: React.FC<AlbumsProps> = ({ initialOpenModal, onModalClose }) => {
               <div className="relative aspect-video bg-slate-950 flex items-center justify-center overflow-hidden">
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-950 to-transparent opacity-60"></div>
                 <div className="text-slate-800 text-4xl transform group-hover:scale-110 transition-transform">{ICONS.Photo}</div>
-                <div className="absolute bottom-4 left-4 right-4 flex justify-between items-end">
-                   <div className="bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider text-white border border-white/10">
-                    {album.categoria}
-                   </div>
-                </div>
               </div>
               <div className="p-7 space-y-5">
                 <div>
@@ -211,12 +224,10 @@ const Albums: React.FC<AlbumsProps> = ({ initialOpenModal, onModalClose }) => {
         </div>
       )}
 
-      {/* NEW ALBUM MODAL */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in duration-300">
           <div className="bg-slate-900 border border-white/10 w-full max-w-4xl rounded-[3rem] p-12 shadow-2xl relative overflow-hidden">
             
-            {/* Modal Steps Indicator */}
             <div className="flex items-center justify-center gap-4 mb-10">
               <div className={`w-3 h-3 rounded-full ${step >= 1 ? 'bg-[#d4af37]' : 'bg-slate-800'}`}></div>
               <div className={`h-[2px] w-12 ${step >= 2 ? 'bg-[#d4af37]' : 'bg-slate-800'}`}></div>
@@ -291,7 +302,7 @@ const Albums: React.FC<AlbumsProps> = ({ initialOpenModal, onModalClose }) => {
             ) : (
               <div className="space-y-8 animate-in slide-in-from-right-4 duration-300">
                 <div className="text-center">
-                  <h3 className="text-3xl font-black text-white tracking-tighter">Upload para o Cloudflare R2</h3>
+                  <h3 className="text-3xl font-black text-white tracking-tighter">Upload de Fotos</h3>
                   <p className="text-slate-500 mt-2 font-medium">As fotos serão processadas e enviadas para o seu storage.</p>
                 </div>
 
@@ -303,7 +314,7 @@ const Albums: React.FC<AlbumsProps> = ({ initialOpenModal, onModalClose }) => {
                     {ICONS.Plus}
                   </div>
                   <p className="text-white font-bold text-lg">Clique para selecionar fotos</p>
-                  <p className="text-slate-500 text-sm mt-2">Arraste seus arquivos aqui (Suporte para 1000+ arquivos)</p>
+                  <p className="text-slate-500 text-sm mt-2">Suporte para arquivos JPG/PNG em massa</p>
                   <input 
                     type="file" 
                     multiple 
@@ -322,13 +333,13 @@ const Albums: React.FC<AlbumsProps> = ({ initialOpenModal, onModalClose }) => {
                           <p className="text-xs font-bold text-white truncate">{item.fileName}</p>
                           <div className="w-full bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
                             <div 
-                              className={`h-full transition-all duration-300 ${item.status === 'completed' ? 'bg-emerald-500' : 'bg-[#d4af37]'}`}
+                              className={`h-full transition-all duration-300 ${item.status === 'completed' ? 'bg-emerald-500' : item.status === 'error' ? 'bg-red-500' : 'bg-[#d4af37]'}`}
                               style={{ width: `${item.progress}%` }}
                             ></div>
                           </div>
                         </div>
                         <div className="text-[10px] font-black uppercase text-slate-500 w-16 text-right">
-                          {item.status === 'completed' ? <span className="text-emerald-500">Pronto</span> : `${Math.round(item.progress)}%`}
+                          {item.status === 'completed' ? <span className="text-emerald-500">Pronto</span> : item.status === 'error' ? <span className="text-red-500">Erro</span> : `${Math.round(item.progress)}%`}
                         </div>
                       </div>
                     ))}
@@ -336,7 +347,7 @@ const Albums: React.FC<AlbumsProps> = ({ initialOpenModal, onModalClose }) => {
                 )}
 
                 <div className="flex gap-4">
-                  <Button variant="primary" className="w-full py-4 rounded-2xl font-bold" onClick={handleCloseModal}>Concluir Álbum</Button>
+                  <Button variant="primary" className="w-full py-4 rounded-2xl font-bold" onClick={handleCloseModal}>Concluir e Ver Álbum</Button>
                 </div>
               </div>
             )}

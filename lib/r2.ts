@@ -1,5 +1,5 @@
 
-// Importação específica para browser ignorando checagens de tipos que forçam node
+// Importação específica para browser
 import { S3Client, PutObjectCommand } from "https://esm.sh/@aws-sdk/client-s3@3.540.0?target=browser&no-check";
 
 const getEnv = (key: string, fallback: string): string => {
@@ -18,9 +18,6 @@ export const R2_CONFIG = {
   publicUrl: getEnv('VITE_R2_PUBLIC_URL', 'https://pub-9082650379b84bf7a848577262e60686.r2.dev') 
 };
 
-/**
- * Cria o cliente apenas quando necessário para evitar erros no carregamento da página
- */
 function createS3Client() {
   return new S3Client({
     region: "auto",
@@ -48,11 +45,15 @@ export async function uploadPhotoToR2(
     const key = `albums/${albumId}/originals/${Date.now()}-${file.name.replace(/\s+/g, '_')}`;
     onProgress(10);
 
+    // CRITICAL FIX: Converter File para ArrayBuffer evita que o SDK tente usar o módulo 'fs' do Node.js
+    const arrayBuffer = await file.arrayBuffer();
+    const body = new Uint8Array(arrayBuffer);
+
     const s3 = createS3Client();
     const command = new PutObjectCommand({
       Bucket: R2_CONFIG.bucketName,
       Key: key,
-      Body: file,
+      Body: body,
       ContentType: file.type,
     });
 
@@ -62,7 +63,7 @@ export async function uploadPhotoToR2(
     const url = `${R2_CONFIG.publicUrl}/${key}`;
     return { url, key };
   } catch (error) {
-    console.error('R2 Upload Error:', error);
+    console.error('R2 Upload Error Detailed:', error);
     throw error;
   }
 }
