@@ -68,7 +68,8 @@ const PublicGallery: React.FC = () => {
         .eq('client_id', client.id);
         
       if (existingSels && existingSels.length > 0) {
-        const ids = new Set(existingSels.map(s => s.photo_id));
+        // Fix: Explicitly type the mapping and Set to avoid Set<unknown> error when assigning to SetStateAction<Set<string>>
+        const ids = new Set<string>(existingSels.map((s: any) => String(s.photo_id)));
         setSelectedPhotos(ids);
         setIsFinished(true);
         
@@ -100,7 +101,6 @@ const PublicGallery: React.FC = () => {
     if (!clientForm.nome || !clientForm.whatsapp || !clientForm.email) return alert("Por favor, preencha todos os campos.");
     try {
       setIdentifying(true);
-      // Busca por WhatsApp ou Email para evitar duplicatas
       let { data: existingClient } = await supabase
         .from('clients')
         .select('*')
@@ -124,7 +124,6 @@ const PublicGallery: React.FC = () => {
       if (existingClient) {
         saveSession(existingClient);
         setShowIdentModal(false);
-        // Ao identificar, já tenta puxar o que ele tinha feito antes
         checkExistingSelection();
       }
     } catch (err) { console.error(err); } finally { setIdentifying(false); }
@@ -136,7 +135,6 @@ const PublicGallery: React.FC = () => {
     
     try {
       setIsFinishing(true);
-      // Limpa seleções anteriores para garantir que a "nova versão" seja a única no painel do fotógrafo
       await supabase.from('selections').delete().eq('album_id', album?.id).eq('client_id', client.id);
       
       const payload = Array.from(selectedPhotos).map(id => ({ 
@@ -158,11 +156,14 @@ const PublicGallery: React.FC = () => {
     }
   };
 
-  const forceDownload = async (photo: Photo) => {
+  const forceDownload = async (e: React.MouseEvent, photo: Photo) => {
+    e.stopPropagation();
     try {
       setDownloading(photo.id);
       const url = `${R2_CONFIG.publicUrl}/${photo.r2_key_original}`;
-      const response = await fetch(url);
+      
+      // Tenta baixar via fetch/blob para forçar o download direto
+      const response = await fetch(url, { mode: 'cors' });
       const blob = await response.blob();
       const blobUrl = window.URL.createObjectURL(blob);
       
@@ -174,9 +175,10 @@ const PublicGallery: React.FC = () => {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(blobUrl);
     } catch (err) {
-      console.error("Erro no download:", err);
-      // Fallback para o modo antigo caso o fetch falhe (CORS)
-      window.open(`${R2_CONFIG.publicUrl}/${photo.r2_key_original}`, '_blank');
+      console.warn("CORS bloqueou download direto ou erro na requisição. Abrindo em nova guia...");
+      // Fallback: Abre em nova guia caso o fetch falhe
+      const url = `${R2_CONFIG.publicUrl}/${photo.r2_key_original}`;
+      window.open(url, '_blank');
     } finally {
       setDownloading(null);
     }
@@ -213,22 +215,20 @@ const PublicGallery: React.FC = () => {
            
            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-8">
               {selectedPhotoList.map(photo => (
-                <div key={photo.id} className="relative aspect-square rounded-[2rem] overflow-hidden group border border-white/5 shadow-2xl transition-all hover:scale-105">
+                <div key={photo.id} className="relative aspect-square rounded-[2rem] overflow-hidden group border border-white/5 shadow-2xl transition-all hover:scale-105 bg-slate-900">
                    <img src={`${R2_CONFIG.publicUrl}/${photo.r2_key_thumbnail}`} className="w-full h-full object-cover" alt="" />
                    
                    {paymentStatus === 'pago' ? (
                      <button 
-                       onClick={() => forceDownload(photo)} 
+                       onClick={(e) => forceDownload(e, photo)} 
                        disabled={downloading === photo.id}
-                       className="absolute inset-0 bg-[#d4af37]/90 opacity-0 group-hover:opacity-100 transition-all flex flex-col items-center justify-center text-black font-black uppercase text-[10px] p-4 gap-2"
+                       title="Baixar Foto Original"
+                       className="absolute bottom-4 right-4 w-12 h-12 bg-[#d4af37] text-black rounded-2xl flex items-center justify-center shadow-2xl hover:scale-110 active:scale-95 transition-all z-50 border border-white/20"
                      >
                         {downloading === photo.id ? (
-                          <div className="w-6 h-6 border-2 border-black/20 border-t-black rounded-full animate-spin"></div>
+                          <div className="w-5 h-5 border-2 border-black/20 border-t-black rounded-full animate-spin"></div>
                         ) : (
-                          <>
-                            <div className="scale-150">{ICONS.Download}</div>
-                            <span>Baixar Original</span>
-                          </>
+                          ICONS.Download
                         )}
                      </button>
                    ) : (
@@ -236,6 +236,9 @@ const PublicGallery: React.FC = () => {
                         {photographer?.marca_dagua_url ? <img src={photographer.marca_dagua_url} className="w-full h-full object-contain" /> : <span className="text-white font-black text-xs tracking-widest uppercase">Protegido</span>}
                      </div>
                    )}
+                   
+                   {/* Overlay de Proteção para impedir clique direito simples no resumo */}
+                   <div className="absolute inset-0 z-10 bg-transparent"></div>
                 </div>
               ))}
            </div>
@@ -244,7 +247,7 @@ const PublicGallery: React.FC = () => {
               {paymentStatus === 'pago' ? (
                 <div className="space-y-4">
                   <p className="text-emerald-500 font-black text-xl tracking-tighter">✓ Pagamento Confirmado!</p>
-                  <p className="text-slate-400 text-sm">Passe o mouse ou toque nas fotos acima para baixar os arquivos em alta resolução.</p>
+                  <p className="text-slate-400 text-sm">Toque no ícone de download dourado em cada foto para baixar o arquivo original.</p>
                 </div>
               ) : (
                 <div className="space-y-8">
@@ -319,7 +322,7 @@ const PublicGallery: React.FC = () => {
 
       {showIdentModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-8 bg-black/98 backdrop-blur-3xl animate-in fade-in duration-500">
-          <div className="bg-slate-900 border border-white/10 w-full max-w-md rounded-[4.5rem] p-12 shadow-3xl text-center space-y-10 border-b-8 border-b-[#d4af37]/30">
+          <div className="bg-slate-900 border border-white/10 w-full max-md rounded-[4.5rem] p-12 shadow-3xl text-center space-y-10 border-b-8 border-b-[#d4af37]/30">
             <div>
               <h3 className="text-4xl font-black text-white tracking-tighter">Acesse o Álbum</h3>
               <p className="text-slate-500 text-xs mt-2 font-medium uppercase tracking-widest">Identifique-se para salvar suas fotos</p>
