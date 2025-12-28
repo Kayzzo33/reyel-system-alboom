@@ -150,72 +150,49 @@ const PublicGallery: React.FC = () => {
     e.preventDefault();
     
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    const fileName = (photo.filename || `foto_${photo.id}.jpg`).toLowerCase().endsWith('.jpg') 
-      ? photo.filename 
-      : `${photo.filename || 'foto'}.jpg`;
+    const fileName = (photo.filename || `foto_${photo.id}`).replace(/\s+/g, '_').toLowerCase();
+    const finalFileName = fileName.endsWith('.jpg') ? fileName : `${fileName}.jpg`;
 
     try {
       setDownloading(photo.id);
       
-      // Fetch com modo CORS explícito e cache-busting
+      // Cache busting e fetch direto
       const url = `${R2_CONFIG.publicUrl}/${photo.r2_key_original}?t=${Date.now()}`;
-      const response = await fetch(url, { mode: 'cors' });
+      const response = await fetch(url);
       
-      if (!response.ok) throw new Error('Falha na resposta do servidor');
+      if (!response.ok) throw new Error('Erro ao baixar');
       
-      const blob = await response.blob();
+      const originalBlob = await response.blob();
       
-      // MÉTODO PARA MOBILE: Usar DataURL (Base64) em vez de Blob URL
-      // DataURLs são tratados como arquivos locais "reais" por navegadores mobile
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64data = reader.result as string;
-        
-        // MÉTODO SHARE API: Segunda tentativa se suportado (Excelente para Galeria do iOS/Android)
-        if (isMobile && navigator.share) {
-          try {
-            const file = new File([blob], fileName, { type: 'image/jpeg' });
-            if (navigator.canShare && navigator.canShare({ files: [file] })) {
-              navigator.share({
-                files: [file],
-                title: fileName,
-              }).then(() => {
-                setDownloading(null);
-              }).catch(() => {
-                // Se o share falhar/cancelar, fazemos o download normal via link
-                triggerLinkDownload(base64data, fileName);
-              });
-              return;
-            }
-          } catch (e) { /* fallback para link */ }
-        }
-
-        triggerLinkDownload(base64data, fileName);
-      };
-      reader.readAsDataURL(blob);
+      // O PULO DO GATO: Convertemos o blob para 'application/octet-stream'
+      // Isso engana o Android/Chrome, impedindo-o de abrir o visualizador de fotos.
+      // O navegador será forçado a tratar como um download de arquivo binário.
+      const forcedBlob = new Blob([originalBlob], { type: 'application/octet-stream' });
+      const blobUrl = window.URL.createObjectURL(forcedBlob);
+      
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.setAttribute('download', finalFileName);
+      link.style.display = 'none';
+      
+      document.body.appendChild(link);
+      link.click();
+      
+      // No Mobile, mantemos a URL viva para que o sistema de downloads do Android complete a tarefa
+      const cleanupTime = isMobile ? 30000 : 5000;
+      
+      setTimeout(() => {
+        if (document.body.contains(link)) document.body.removeChild(link);
+        if (!isMobile) window.URL.revokeObjectURL(blobUrl);
+      }, cleanupTime);
 
     } catch (err) { 
       console.error("Erro no download:", err);
-      // Fallback final: abertura direta sem Blob
-      const fallbackUrl = `${R2_CONFIG.publicUrl}/${photo.r2_key_original}`;
-      window.open(fallbackUrl, '_blank'); 
+      // Fallback final
+      window.open(`${R2_CONFIG.publicUrl}/${photo.r2_key_original}`, '_blank'); 
     } finally { 
-      // Não resetamos o estado 'downloading' aqui pois o reader é assíncrono
-      setTimeout(() => setDownloading(null), 2000);
+      setDownloading(null); 
     }
-  };
-
-  const triggerLinkDownload = (href: string, fileName: string) => {
-    const link = document.createElement('a');
-    link.href = href;
-    link.download = fileName;
-    // NÃO usar target="_blank" aqui, para não abrir a aba do Google
-    link.style.display = 'none';
-    document.body.appendChild(link);
-    link.click();
-    setTimeout(() => {
-      if (document.body.contains(link)) document.body.removeChild(link);
-    }, 5000);
   };
 
   if (loading) return (
