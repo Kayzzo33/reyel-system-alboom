@@ -150,56 +150,62 @@ const PublicGallery: React.FC = () => {
     e.preventDefault();
     
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    const fileName = photo.filename?.toLowerCase().endsWith('.jpg') 
-      ? photo.filename 
-      : `${photo.filename || 'foto'}.jpg`;
+    // Removemos caracteres que podem quebrar o sistema de arquivos no mobile
+    const cleanFileName = (photo.filename || 'foto')
+      .replace(/[^a-z0-9.]/gi, '_')
+      .toLowerCase();
+    
+    const finalFileName = cleanFileName.endsWith('.jpg') ? cleanFileName : `${cleanFileName}.jpg`;
 
     try {
       setDownloading(photo.id);
       
-      const url = `${R2_CONFIG.publicUrl}/${photo.r2_key_original}?t=${new Date().getTime()}`;
+      // Adicionamos cache-busting para garantir que o fetch pegue os headers CORS atualizados
+      const url = `${R2_CONFIG.publicUrl}/${photo.r2_key_original}?t=${Date.now()}`;
       const response = await fetch(url);
-      if (!response.ok) throw new Error('Network error');
+      
+      if (!response.ok) throw new Error('Falha no download do arquivo');
+      
       const blob = await response.blob();
       
-      // Criamos o arquivo com tipo MIME explícito
-      const imageFile = new File([blob], fileName, { type: 'image/jpeg' });
-
-      // MÉTODO 1: SHARE API (Melhor para Mobile/Galeria)
-      if (isMobile && navigator.share && navigator.canShare && navigator.canShare({ files: [imageFile] })) {
-        await navigator.share({
-          files: [imageFile],
-          title: fileName,
-          text: 'Baixando foto da ReyelProduções'
-        });
-        setDownloading(null);
-        return;
-      }
-
-      // MÉTODO 2: BLOB DOWNLOAD (Desktop e Fallback Mobile)
-      const blobUrl = window.URL.createObjectURL(blob);
+      // FORÇAR TIPO MIME: Criamos um novo blob explicitamente como imagem/jpeg
+      // Isso é o que faz a Galeria do celular entender o arquivo como foto.
+      const imageBlob = new Blob([blob], { type: 'image/jpeg' });
+      const blobUrl = window.URL.createObjectURL(imageBlob);
+      
       const link = document.createElement('a');
       link.href = blobUrl;
       link.style.display = 'none';
-      link.setAttribute('download', fileName);
+      link.setAttribute('download', finalFileName);
+      
+      // No Mobile, abrir em nova aba às vezes ajuda o sistema de downloads a ser mais persistente
+      if (isMobile) {
+        link.setAttribute('target', '_blank');
+        link.setAttribute('rel', 'noopener');
+      }
       
       document.body.appendChild(link);
       link.click();
       
-      // No Mobile, não revogamos a URL por um longo tempo para garantir que o "Abrir" do popup funcione
-      const revokeTime = isMobile ? 60000 : 5000;
-      
-      setTimeout(() => {
-        if (document.body.contains(link)) {
-          document.body.removeChild(link);
-        }
-        window.URL.revokeObjectURL(blobUrl);
-      }, revokeTime);
+      // CRÍTICO: No Desktop revogamos rápido. No Mobile, NÃO revogamos.
+      // A revogação mata o link que o Android usa para "Abrir" o arquivo após baixar.
+      if (!isMobile) {
+        setTimeout(() => {
+          if (document.body.contains(link)) document.body.removeChild(link);
+          window.URL.revokeObjectURL(blobUrl);
+        }, 5000);
+      } else {
+        // No mobile apenas limpamos o elemento do DOM, mantendo a URL viva na memória do navegador
+        setTimeout(() => {
+          if (document.body.contains(link)) document.body.removeChild(link);
+        }, 10000);
+      }
 
     } catch (err) { 
-      console.warn("Download robusto falhou, tentando abertura direta...", err);
-      const url = `${R2_CONFIG.publicUrl}/${photo.r2_key_original}`;
-      window.open(url, '_blank'); 
+      console.error("Erro no download:", err);
+      // Fallback final caso o fetch falhe por CORS ou memória
+      const fallbackUrl = `${R2_CONFIG.publicUrl}/${photo.r2_key_original}`;
+      window.open(fallbackUrl, '_blank'); 
     } finally { 
       setDownloading(null); 
     }
