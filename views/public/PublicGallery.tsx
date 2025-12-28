@@ -150,65 +150,72 @@ const PublicGallery: React.FC = () => {
     e.preventDefault();
     
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    // Removemos caracteres que podem quebrar o sistema de arquivos no mobile
-    const cleanFileName = (photo.filename || 'foto')
-      .replace(/[^a-z0-9.]/gi, '_')
-      .toLowerCase();
-    
-    const finalFileName = cleanFileName.endsWith('.jpg') ? cleanFileName : `${cleanFileName}.jpg`;
+    const fileName = (photo.filename || `foto_${photo.id}.jpg`).toLowerCase().endsWith('.jpg') 
+      ? photo.filename 
+      : `${photo.filename || 'foto'}.jpg`;
 
     try {
       setDownloading(photo.id);
       
-      // Adicionamos cache-busting para garantir que o fetch pegue os headers CORS atualizados
+      // Fetch com modo CORS explícito e cache-busting
       const url = `${R2_CONFIG.publicUrl}/${photo.r2_key_original}?t=${Date.now()}`;
-      const response = await fetch(url);
+      const response = await fetch(url, { mode: 'cors' });
       
-      if (!response.ok) throw new Error('Falha no download do arquivo');
+      if (!response.ok) throw new Error('Falha na resposta do servidor');
       
       const blob = await response.blob();
       
-      // FORÇAR TIPO MIME: Criamos um novo blob explicitamente como imagem/jpeg
-      // Isso é o que faz a Galeria do celular entender o arquivo como foto.
-      const imageBlob = new Blob([blob], { type: 'image/jpeg' });
-      const blobUrl = window.URL.createObjectURL(imageBlob);
-      
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.style.display = 'none';
-      link.setAttribute('download', finalFileName);
-      
-      // No Mobile, abrir em nova aba às vezes ajuda o sistema de downloads a ser mais persistente
-      if (isMobile) {
-        link.setAttribute('target', '_blank');
-        link.setAttribute('rel', 'noopener');
-      }
-      
-      document.body.appendChild(link);
-      link.click();
-      
-      // CRÍTICO: No Desktop revogamos rápido. No Mobile, NÃO revogamos.
-      // A revogação mata o link que o Android usa para "Abrir" o arquivo após baixar.
-      if (!isMobile) {
-        setTimeout(() => {
-          if (document.body.contains(link)) document.body.removeChild(link);
-          window.URL.revokeObjectURL(blobUrl);
-        }, 5000);
-      } else {
-        // No mobile apenas limpamos o elemento do DOM, mantendo a URL viva na memória do navegador
-        setTimeout(() => {
-          if (document.body.contains(link)) document.body.removeChild(link);
-        }, 10000);
-      }
+      // MÉTODO PARA MOBILE: Usar DataURL (Base64) em vez de Blob URL
+      // DataURLs são tratados como arquivos locais "reais" por navegadores mobile
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64data = reader.result as string;
+        
+        // MÉTODO SHARE API: Segunda tentativa se suportado (Excelente para Galeria do iOS/Android)
+        if (isMobile && navigator.share) {
+          try {
+            const file = new File([blob], fileName, { type: 'image/jpeg' });
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+              navigator.share({
+                files: [file],
+                title: fileName,
+              }).then(() => {
+                setDownloading(null);
+              }).catch(() => {
+                // Se o share falhar/cancelar, fazemos o download normal via link
+                triggerLinkDownload(base64data, fileName);
+              });
+              return;
+            }
+          } catch (e) { /* fallback para link */ }
+        }
+
+        triggerLinkDownload(base64data, fileName);
+      };
+      reader.readAsDataURL(blob);
 
     } catch (err) { 
       console.error("Erro no download:", err);
-      // Fallback final caso o fetch falhe por CORS ou memória
+      // Fallback final: abertura direta sem Blob
       const fallbackUrl = `${R2_CONFIG.publicUrl}/${photo.r2_key_original}`;
       window.open(fallbackUrl, '_blank'); 
     } finally { 
-      setDownloading(null); 
+      // Não resetamos o estado 'downloading' aqui pois o reader é assíncrono
+      setTimeout(() => setDownloading(null), 2000);
     }
+  };
+
+  const triggerLinkDownload = (href: string, fileName: string) => {
+    const link = document.createElement('a');
+    link.href = href;
+    link.download = fileName;
+    // NÃO usar target="_blank" aqui, para não abrir a aba do Google
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    setTimeout(() => {
+      if (document.body.contains(link)) document.body.removeChild(link);
+    }, 5000);
   };
 
   if (loading) return (
@@ -264,17 +271,11 @@ const PublicGallery: React.FC = () => {
               ))}
            </div>
 
-           <div className="bg-[#0a0a0a] p-10 md:p-16 rounded-[3rem] md:rounded-[5rem] max-w-2xl mx-auto border border-white/5 shadow-3xl">
+           <div className="bg-[#0a0a0a] p-10 md:p-16 rounded-[3rem] md:rounded-[5rem] max-w-2xl mx-auto border border-white/5 shadow-3xl text-xs md:text-sm font-bold text-slate-500 italic">
               {paymentStatus === 'pago' ? (
-                <div className="space-y-4">
-                  <p className="text-emerald-500 font-black text-2xl tracking-tighter uppercase">Downloads Prontos</p>
-                  <p className="text-slate-500 text-xs font-bold">Clique no ícone de download em cada foto para baixar o arquivo original.</p>
-                </div>
+                <p className="not-italic text-emerald-500 font-black uppercase tracking-widest">Downloads Disponíveis</p>
               ) : (
-                <div className="space-y-8">
-                   <p className="text-slate-400 font-bold leading-relaxed text-sm md:text-base italic">"Sua seleção de {selectedPhotos.size} fotos foi enviada com sucesso. O download será liberado automaticamente após a confirmação do pagamento."</p>
-                   <Button variant="outline" className="w-full py-6 rounded-3xl text-[10px] tracking-[0.2em]" onClick={() => setIsFinished(false)}>Revisar Minha Escolha</Button>
-                </div>
+                <p>"Sua seleção de {selectedPhotos.size} fotos foi enviada. O download será liberado após o pagamento."</p>
               )}
            </div>
         </main>
