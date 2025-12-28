@@ -6,6 +6,9 @@ import { Album, Photo, Client, Profile } from '../../types';
 import { ICONS, COLORS } from '../../constants';
 import Button from '../../components/ui/Button';
 
+// Identificador de versão para verificar se o cache foi limpo
+console.log("%c REYEL DOWNLOAD ENGINE v3.0 - SHARE API ACTIVE ", "background: #ff0000; color: #fff; font-weight: bold;");
+
 const useClientSession = (albumId: string) => {
   const key = `reyel_client_${albumId}`;
   const [client, setClient] = useState<Partial<Client> | null>(() => {
@@ -150,46 +153,56 @@ const PublicGallery: React.FC = () => {
     e.preventDefault();
     
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    const fileName = (photo.filename || `foto_${photo.id}`).replace(/\s+/g, '_').toLowerCase();
-    const finalFileName = fileName.endsWith('.jpg') ? fileName : `${fileName}.jpg`;
+    const cleanName = (photo.filename || 'foto').replace(/\.[^/.]+$/, "").replace(/\s+/g, '_');
+    const fileName = `${cleanName}.jpg`;
 
     try {
       setDownloading(photo.id);
       
-      // Cache busting e fetch direto
-      const url = `${R2_CONFIG.publicUrl}/${photo.r2_key_original}?t=${Date.now()}`;
-      const response = await fetch(url);
-      
-      if (!response.ok) throw new Error('Erro ao baixar');
-      
-      const originalBlob = await response.blob();
-      
-      // O PULO DO GATO: Convertemos o blob para 'application/octet-stream'
-      // Isso engana o Android/Chrome, impedindo-o de abrir o visualizador de fotos.
-      // O navegador será forçado a tratar como um download de arquivo binário.
-      const forcedBlob = new Blob([originalBlob], { type: 'application/octet-stream' });
-      const blobUrl = window.URL.createObjectURL(forcedBlob);
+      // Fetch com cache busting
+      const response = await fetch(`${R2_CONFIG.publicUrl}/${photo.r2_key_original}?v=${Date.now()}`);
+      if (!response.ok) throw new Error('Falha no servidor');
+      const blob = await response.blob();
+
+      // MODO MOBILE: SHARE API (Incomparavelmente superior para Galeria)
+      if (isMobile && navigator.canShare) {
+        try {
+          const file = new File([blob], fileName, { type: 'image/jpeg' });
+          if (navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              files: [file],
+              title: 'Reyel Produções',
+              text: 'Sua foto está pronta!'
+            });
+            setDownloading(null);
+            return; // Sucesso absoluto no mobile
+          }
+        } catch (shareErr) {
+          console.warn("Share API falhou, tentando link binário...");
+        }
+      }
+
+      // MODO DESKTOP OU FALLBACK: LINK BINÁRIO (APPLICATION/OCTET-STREAM)
+      const binaryBlob = new Blob([blob], { type: 'application/octet-stream' });
+      const blobUrl = window.URL.createObjectURL(binaryBlob);
       
       const link = document.createElement('a');
       link.href = blobUrl;
-      link.setAttribute('download', finalFileName);
+      link.download = fileName;
       link.style.display = 'none';
-      
       document.body.appendChild(link);
       link.click();
       
-      // No Mobile, mantemos a URL viva para que o sistema de downloads do Android complete a tarefa
-      const cleanupTime = isMobile ? 30000 : 5000;
-      
+      // Limpeza
       setTimeout(() => {
         if (document.body.contains(link)) document.body.removeChild(link);
         if (!isMobile) window.URL.revokeObjectURL(blobUrl);
-      }, cleanupTime);
+      }, 10000);
 
     } catch (err) { 
-      console.error("Erro no download:", err);
-      // Fallback final
-      window.open(`${R2_CONFIG.publicUrl}/${photo.r2_key_original}`, '_blank'); 
+      console.error("Erro fatal download:", err);
+      // Fallback de emergência (abrir imagem nua)
+      window.location.assign(`${R2_CONFIG.publicUrl}/${photo.r2_key_original}`);
     } finally { 
       setDownloading(null); 
     }
@@ -218,14 +231,14 @@ const PublicGallery: React.FC = () => {
            </div>
            <div className={`px-6 py-3 rounded-full border text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-4 shadow-xl ${paymentStatus === 'pago' ? 'bg-emerald-600/10 border-emerald-600/30 text-emerald-600' : 'bg-red-600/10 border-red-600/30 text-red-600'}`}>
               <span className={`w-2 h-2 rounded-full animate-pulse ${paymentStatus === 'pago' ? 'bg-emerald-600' : 'bg-red-600'}`}></span>
-              {paymentStatus === 'pago' ? 'Downloads Liberados' : 'Aguardando Pagamento'}
+              {paymentStatus === 'pago' ? 'Acesso Liberado' : 'Pagamento Pendente'}
            </div>
         </header>
 
         <main className="max-w-7xl mx-auto text-center space-y-16 pb-20">
            <h2 className="text-4xl md:text-6xl font-black tracking-tighter uppercase">Minha Seleção</h2>
            
-           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6 md:gap-10">
+           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-10 px-2">
               {selectedPhotoList.map(photo => (
                 <div key={photo.id} className="relative aspect-[3/4] rounded-3xl overflow-hidden group border border-white/5 shadow-3xl bg-[#0a0a0a]">
                    <img src={`${R2_CONFIG.publicUrl}/${photo.r2_key_thumbnail}`} className="w-full h-full object-cover" alt="" loading="lazy" />
@@ -233,7 +246,7 @@ const PublicGallery: React.FC = () => {
                    {paymentStatus === 'pago' && (
                      <button 
                        onClick={(e) => forceDownload(e, photo)} 
-                       className="absolute bottom-4 right-4 w-12 h-12 bg-red-600 text-white rounded-2xl flex items-center justify-center shadow-2xl hover:scale-110 active:scale-95 transition-all z-50 border border-white/10"
+                       className="absolute bottom-4 right-4 w-12 h-12 bg-red-600 text-white rounded-2xl flex items-center justify-center shadow-2xl active:scale-90 transition-all z-50 border border-white/10"
                      >
                         {downloading === photo.id ? <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></div> : ICONS.Download}
                      </button>
@@ -248,11 +261,17 @@ const PublicGallery: React.FC = () => {
               ))}
            </div>
 
-           <div className="bg-[#0a0a0a] p-10 md:p-16 rounded-[3rem] md:rounded-[5rem] max-w-2xl mx-auto border border-white/5 shadow-3xl text-xs md:text-sm font-bold text-slate-500 italic">
+           <div className="bg-[#0a0a0a] p-10 md:p-16 rounded-[3rem] md:rounded-[5rem] max-w-2xl mx-auto border border-white/5 shadow-3xl text-center">
               {paymentStatus === 'pago' ? (
-                <p className="not-italic text-emerald-500 font-black uppercase tracking-widest">Downloads Disponíveis</p>
+                <div className="space-y-4">
+                  <p className="text-emerald-500 font-black text-xl tracking-tighter uppercase">Downloads Habilitados</p>
+                  <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest">Toque no ícone vermelho em cada foto para salvar.</p>
+                </div>
               ) : (
-                <p>"Sua seleção de {selectedPhotos.size} fotos foi enviada. O download será liberado após o pagamento."</p>
+                <div className="space-y-6">
+                   <p className="text-slate-400 font-bold leading-relaxed text-xs md:text-sm italic">Sua seleção de {selectedPhotos.size} fotos foi salva. O download em alta resolução será liberado após a confirmação do pagamento pelo fotógrafo.</p>
+                   <Button variant="outline" className="w-full py-5 rounded-3xl text-[9px] tracking-[0.2em]" onClick={() => setIsFinished(false)}>Adicionar mais fotos</Button>
+                </div>
               )}
            </div>
         </main>
@@ -278,11 +297,11 @@ const PublicGallery: React.FC = () => {
           isLoading={isFinishing} 
           onClick={handleFinishSelection}
         >
-          Finalizar
+          Salvar Seleção
         </Button>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6 py-12 md:py-24 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-6 md:gap-12">
+      <main className="max-w-7xl mx-auto px-4 py-8 md:py-24 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-4 md:gap-12">
         {photos.map(photo => (
           <div 
             key={photo.id} 
@@ -291,19 +310,19 @@ const PublicGallery: React.FC = () => {
           >
              <img src={`${R2_CONFIG.publicUrl}/${photo.r2_key_thumbnail}`} className="w-full h-full object-cover" loading="lazy" />
              
-             <div className="absolute top-4 right-4 md:top-8 md:right-8 z-40" onClick={(e) => { 
+             <div className="absolute top-4 right-4 z-40" onClick={(e) => { 
                e.stopPropagation(); 
                if(!client) return setShowIdentModal(true); 
                const n = new Set(selectedPhotos); 
                if(n.has(photo.id)) n.delete(photo.id); 
                else {
-                 if(n.size >= (album?.max_selecoes || 999)) return alert("Limite excedido!");
+                 if(n.size >= (album?.max_selecoes || 999)) return alert("Limite de fotos atingido.");
                  n.add(photo.id);
                }
                setSelectedPhotos(n); 
              }}>
-                <div className={`w-12 h-12 md:w-16 md:h-16 rounded-2xl border flex items-center justify-center transition-all backdrop-blur-2xl ${selectedPhotos.has(photo.id) ? 'bg-red-600 border-red-600 text-white scale-110 shadow-2xl shadow-red-600/30' : 'bg-black/40 border-white/10 text-white/40'}`}>
-                   {selectedPhotos.has(photo.id) ? <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> : <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>}
+                <div className={`w-10 h-10 md:w-16 md:h-16 rounded-2xl border flex items-center justify-center transition-all backdrop-blur-2xl ${selectedPhotos.has(photo.id) ? 'bg-red-600 border-red-600 text-white scale-110 shadow-2xl shadow-red-600/30' : 'bg-black/40 border-white/10 text-white/40'}`}>
+                   {selectedPhotos.has(photo.id) ? <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> : <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>}
                 </div>
              </div>
              
@@ -316,9 +335,9 @@ const PublicGallery: React.FC = () => {
 
       {showIdentModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/98 backdrop-blur-3xl animate-in fade-in duration-500">
-          <div className="bg-[#0a0a0a] border border-white/10 w-full max-w-md rounded-[3rem] md:rounded-[5rem] p-10 md:p-16 shadow-3xl text-center space-y-10 border-b-8 border-b-red-600/30">
+          <div className="bg-[#0a0a0a] border border-white/10 w-full max-w-md rounded-[3rem] p-10 md:p-16 shadow-3xl text-center space-y-10">
             <div>
-              <h3 className="text-3xl md:text-4xl font-black text-white tracking-tighter uppercase">Identificação</h3>
+              <h3 className="text-3xl font-black text-white tracking-tighter uppercase">Identificação</h3>
               <p className="text-slate-600 text-[10px] mt-3 font-black uppercase tracking-[0.2em]">Acesse para salvar suas fotos</p>
             </div>
             <div className="space-y-4">
@@ -326,36 +345,33 @@ const PublicGallery: React.FC = () => {
               <input type="email" placeholder="E-mail" className="w-full bg-black border border-white/5 rounded-2xl px-8 py-5 text-white font-bold outline-none focus:ring-1 focus:ring-red-600/40" value={clientForm.email} onChange={e => setClientForm({...clientForm, email: e.target.value})} />
               <input type="text" placeholder="WhatsApp (Com DDD)" className="w-full bg-black border border-white/5 rounded-2xl px-8 py-5 text-white font-bold outline-none focus:ring-1 focus:ring-red-600/40" value={clientForm.whatsapp} onChange={e => setClientForm({...clientForm, whatsapp: e.target.value})} />
             </div>
-            <Button variant="primary" className="w-full py-6 rounded-3xl font-black uppercase text-xs" isLoading={identifying} onClick={handleIdentification}>Acessar Galeria</Button>
-            <button className="text-slate-700 text-[9px] font-black uppercase tracking-widest mt-6 hover:text-white" onClick={() => setShowIdentModal(false)}>Voltar</button>
+            <Button variant="primary" className="w-full py-6 rounded-3xl font-black uppercase text-xs" isLoading={identifying} onClick={handleIdentification}>Entrar na Galeria</Button>
+            <button className="text-slate-700 text-[9px] font-black uppercase tracking-widest mt-6" onClick={() => setShowIdentModal(false)}>Cancelar</button>
           </div>
         </div>
       )}
 
       {viewingPhoto && (
         <div className="fixed inset-0 z-[110] bg-black/99 backdrop-blur-3xl flex flex-col items-center justify-center p-4 animate-in fade-in duration-500">
-          <button className="absolute top-8 right-8 p-4 text-white/40 hover:text-white font-black text-[10px] tracking-widest uppercase" onClick={() => setViewingPhoto(null)}>Fechar Visualização</button>
+          <button className="absolute top-8 right-8 p-4 text-white/40 font-black text-[10px] tracking-widest uppercase" onClick={() => setViewingPhoto(null)}>Fechar</button>
           <div className="relative max-h-[75vh] md:max-h-[85vh] rounded-[2rem] overflow-hidden border border-white/5 shadow-3xl">
             <img src={`${R2_CONFIG.publicUrl}/${viewingPhoto.r2_key_original}`} className="max-h-[75vh] md:max-h-[85vh] object-contain pointer-events-none" />
-            <div className="absolute inset-0 flex items-center justify-center opacity-30 p-20 rotate-[-15deg] grayscale contrast-150 pointer-events-none">
-              {photographer?.marca_dagua_url ? <img src={photographer.marca_dagua_url} className="w-full h-full object-contain" /> : <span className="text-white/5 font-black text-6xl uppercase tracking-[1em]">PROTEGIDO</span>}
-            </div>
           </div>
           <div className="mt-12">
              <Button 
                variant={selectedPhotos.has(viewingPhoto.id) ? 'primary' : 'outline'} 
-               className="md:px-16 py-6 rounded-3xl font-black uppercase text-[12px] tracking-widest"
+               className="px-12 py-5 rounded-3xl font-black uppercase text-[10px] tracking-widest"
                onClick={() => {
                  const n = new Set(selectedPhotos);
                  if(n.has(viewingPhoto.id)) n.delete(viewingPhoto.id);
                  else {
-                   if(n.size >= (album?.max_selecoes || 999)) return alert("Limite excedido!");
+                   if(n.size >= (album?.max_selecoes || 999)) return alert("Limite de fotos atingido.");
                    n.add(viewingPhoto.id);
                  }
                  setSelectedPhotos(n);
                }}
              >
-               {selectedPhotos.has(viewingPhoto.id) ? '✓ Foto Selecionada' : '+ Adicionar à Seleção'}
+               {selectedPhotos.has(viewingPhoto.id) ? '✓ Selecionada' : 'Selecionar Foto'}
              </Button>
           </div>
         </div>
