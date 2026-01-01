@@ -25,40 +25,36 @@ const r2Client = new AwsClient({
 });
 
 /**
- * Upload direto para o R2 com tratamento robusto de erros
+ * Upload definitivo: Simples, limpo e assinado corretamente.
  */
 export async function uploadToR2Direct(file: File | Blob, key: string): Promise<string> {
   const url = `https://${R2_CONFIG.accountId}.r2.cloudflarestorage.com/${R2_CONFIG.bucketName}/${key}`;
   
   try {
     const arrayBuffer = await file.arrayBuffer();
-    const contentType = file instanceof File ? file.type : 'image/webp';
-
-    // Log para depuração técnica (pode ser visto no F12 Console)
-    console.log(`[R2] Iniciando upload: ${key} (${contentType})`);
+    
+    // Deixamos o Content-Type ser definido apenas se for um File. 
+    // Se for Blob (miniatura), o R2 assume application/octet-stream ou detecta.
+    const headers: Record<string, string> = {};
+    if (file instanceof File && file.type) {
+      headers['Content-Type'] = file.type;
+    }
 
     const response = await r2Client.fetch(url, {
       method: 'PUT',
       body: arrayBuffer,
-      headers: { 
-        'Content-Type': contentType
-        // Content-Length é calculado automaticamente pelo fetch ao usar ArrayBuffer
-      }
+      headers
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`[R2 ERROR ${response.status}]:`, errorText);
-      throw new Error(`Erro R2: ${response.status}`);
+      console.error(`[R2 Error ${response.status}]:`, errorText);
+      throw new Error(`R2 fail: ${response.status}`);
     }
 
-    console.log(`[R2] Upload concluído com sucesso: ${key}`);
     return `${R2_CONFIG.publicUrl}/${key}`;
   } catch (err: any) {
-    if (err.message === 'Failed to fetch') {
-      console.error("ERRO DE REDE/CORS: Verifique a configuração de CORS no painel do Cloudflare R2.");
-      throw new Error("Erro de conexão ou CORS. Verifique as configurações do Cloudflare.");
-    }
+    console.error("Erro crítico no upload R2:", err);
     throw err;
   }
 }
@@ -79,7 +75,7 @@ async function createThumbnail(file: File, maxWidth = 600): Promise<Blob> {
         canvas.width = img.width * scale;
         canvas.height = img.height * scale;
         const ctx = canvas.getContext('2d');
-        if (!ctx) return reject(new Error("Canvas context error"));
+        if (!ctx) return reject(new Error("Canvas failure"));
         
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
@@ -87,12 +83,12 @@ async function createThumbnail(file: File, maxWidth = 600): Promise<Blob> {
         
         canvas.toBlob((blob) => {
           if (blob) resolve(blob);
-          else reject(new Error("Blob conversion error"));
+          else reject(new Error("Blob failure"));
         }, 'image/webp', 0.85);
       };
-      img.onerror = () => reject(new Error("Image load error"));
+      img.onerror = () => reject(new Error("Img load error"));
     };
-    reader.onerror = () => reject(new Error("File read error"));
+    reader.onerror = () => reject(new Error("Read error"));
   });
 }
 
@@ -121,7 +117,7 @@ export async function uploadPhotoWithThumbnail(
 }
 
 /**
- * Atalho para upload de arquivos únicos (Capa, Logo, etc)
+ * Upload de arquivos únicos (Capa, Logo, etc)
  */
 export async function uploadPhotoToR2(
   file: File, 
