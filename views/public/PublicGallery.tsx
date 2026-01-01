@@ -36,6 +36,7 @@ const PublicGallery: React.FC = () => {
   const [identifying, setIdentifying] = useState(false);
   const [downloading, setDownloading] = useState<string | null>(null);
   const [isProtected, setIsProtected] = useState(false); 
+  const [hasPreviousSelection, setHasPreviousSelection] = useState(false);
 
   const photosRef = useRef<HTMLElement>(null);
   const queryParams = new URLSearchParams(window.location.search);
@@ -50,26 +51,21 @@ const PublicGallery: React.FC = () => {
     document.addEventListener('contextmenu', block);
     document.addEventListener('dragstart', block);
     
-    // SISTEMA ANTI-PRINT "ZERO DELAY"
     const triggerProtection = () => setIsProtected(true);
     const releaseProtection = () => setTimeout(() => setIsProtected(false), 1000);
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Bloqueio ultra-rápido: Shift, Control, Alt, Meta (Windows/Cmd), PrintScreen
       if (e.shiftKey || e.ctrlKey || e.altKey || e.metaKey || e.key === 'PrintScreen') {
         setIsProtected(true);
       }
     };
 
     const handleKeyUp = () => {
-      // Pequeno respiro antes de tirar o blur
       setTimeout(() => setIsProtected(false), 800);
     };
 
-    // Usar a fase de CAPTURA (true) faz o evento disparar ANTES de qualquer outro script
     window.addEventListener('keydown', handleKeyDown, true);
     window.addEventListener('keyup', handleKeyUp, true);
-    
     window.addEventListener('blur', triggerProtection);
     window.addEventListener('focus', releaseProtection);
     
@@ -106,6 +102,8 @@ const PublicGallery: React.FC = () => {
       if (existingSels && existingSels.length > 0) {
         const ids = new Set<string>(existingSels.map((s: any) => String(s.photo_id)));
         setSelectedPhotos(ids);
+        setHasPreviousSelection(true);
+        // Se já tinha seleção, marcar como finalizado para mostrar o resumo
         setIsFinished(true);
         
         const { data: pStat } = await supabase
@@ -163,7 +161,6 @@ const PublicGallery: React.FC = () => {
       if (existingClient) {
         saveSession(existingClient);
         setShowIdentModal(false);
-        checkExistingSelection();
       }
     } catch (err) { console.error(err); } finally { setIdentifying(false); }
   };
@@ -181,6 +178,7 @@ const PublicGallery: React.FC = () => {
       }));
       await supabase.from('selections').insert(payload);
       setIsFinished(true);
+      setHasPreviousSelection(true);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) { alert("Erro ao salvar."); } finally { setIsFinishing(false); }
   };
@@ -228,7 +226,6 @@ const PublicGallery: React.FC = () => {
   return (
     <div className={`min-h-screen bg-[#000000] select-none`}>
       
-      {/* OVERLAY DE PROTEÇÃO SEM TRANSIÇÃO PARA MÁXIMA VELOCIDADE */}
       {isProtected && (
         <div className="fixed inset-0 z-[500] bg-black/70 backdrop-blur-[100px] flex items-center justify-center pointer-events-none">
           <div className="text-white font-black text-[10px] uppercase tracking-[1em] opacity-40">Reyel Produções - Protegido</div>
@@ -248,7 +245,7 @@ const PublicGallery: React.FC = () => {
                 </div>
               </div>
               <div>
-                <Button variant="outline" className="rounded-none px-12 py-5 font-black uppercase text-[10px] tracking-widest border-red-600/50 text-red-600 hover:bg-red-600 hover:text-white" onClick={scrollToPhotos}>Ver Galeria</Button>
+                <Button variant="premium" size="lg" className="px-16 py-6" onClick={scrollToPhotos}>Explorar Galeria</Button>
               </div>
            </div>
            <div className="w-full lg:w-1/2 h-full relative group">
@@ -263,31 +260,53 @@ const PublicGallery: React.FC = () => {
         </section>
       )}
 
-      {/* HEADER FIXO */}
+      {/* HEADER FIXO COM BOTÕES CONDICIONAIS */}
       {!isFinished && (
-        <header className="sticky top-0 z-50 bg-[#000000]/80 backdrop-blur-3xl border-b border-white/5 px-6 py-6 md:py-8 flex justify-between items-center">
+        <header className="sticky top-0 z-50 bg-[#000000]/80 backdrop-blur-3xl border-b border-white/5 px-6 py-4 md:py-6 flex justify-between items-center">
           <div className="flex items-center gap-4">
-             <div className="w-12 h-12 bg-[#0a0a0a] rounded-xl border border-white/5 flex items-center justify-center overflow-hidden">
+             <div className="w-10 h-10 md:w-12 md:h-12 bg-[#0a0a0a] rounded-xl border border-white/5 flex items-center justify-center overflow-hidden">
                {photographer?.logo_url ? <img src={photographer.logo_url} className="w-full h-full object-contain p-2" /> : <span className="text-red-600 font-black text-sm">R</span>}
              </div>
              <div>
-               <h2 className="text-sm font-black text-white leading-none tracking-tighter uppercase">{album?.nome_galeria}</h2>
-               <p className="text-[10px] text-slate-600 font-black mt-1.5 uppercase tracking-widest"><span className="text-red-600">{selectedPhotos.size}</span> / {album?.max_selecoes} SELECIONADAS</p>
+               <h2 className="text-[10px] md:text-xs font-black text-white leading-none tracking-tighter uppercase">{album?.nome_galeria}</h2>
+               <p className="text-[8px] md:text-[9px] text-slate-600 font-black mt-1 uppercase tracking-widest"><span className="text-red-600">{selectedPhotos.size}</span> / {album?.max_selecoes} FOTOS</p>
              </div>
           </div>
-          <Button variant="primary" className="rounded-xl px-6 md:px-10 py-4 font-black uppercase text-[10px] tracking-widest" isLoading={isFinishing} onClick={handleFinishSelection}>Finalizar</Button>
+          
+          <div className="flex items-center gap-2 md:gap-4">
+             {/* Botão de Ver Seleção Já Salva (Só aparece se ele já logou e o sistema detectou algo) */}
+             {hasPreviousSelection && (
+               <Button 
+                 variant="ghost" 
+                 size="sm" 
+                 className="hidden md:inline-flex border border-white/10"
+                 onClick={() => setIsFinished(true)}
+               >
+                 Acessar Minhas Escolhas
+               </Button>
+             )}
+
+             <Button 
+               variant="primary" 
+               className="rounded-xl px-4 md:px-8 py-3 md:py-4 font-black uppercase text-[9px] md:text-[10px] tracking-widest" 
+               isLoading={isFinishing} 
+               onClick={handleFinishSelection}
+             >
+               {client ? "Confirmar Seleção" : "Iniciar Seleção"}
+             </Button>
+          </div>
         </header>
       )}
 
-      {/* RESULTADO */}
+      {/* TELA DE RESUMO / FINALIZADO */}
       {isFinished && (
         <main className="max-w-7xl mx-auto px-6 py-20 text-center space-y-16 animate-in fade-in duration-700">
            <header className="flex flex-col items-center gap-6">
               <div className="w-20 h-20 bg-emerald-600/10 text-emerald-600 rounded-3xl flex items-center justify-center border border-emerald-600/20">{ICONS.Check}</div>
-              <h1 className="text-4xl md:text-6xl font-black text-white tracking-tighter uppercase">Seleção Concluída</h1>
-              <p className="text-slate-500 font-bold max-w-md">Olá {client?.nome}, suas {selectedPhotos.size} fotos favoritas foram enviadas para o fotógrafo com sucesso!</p>
+              <h1 className="text-4xl md:text-6xl font-black text-white tracking-tighter uppercase">Minha Seleção</h1>
+              <p className="text-slate-500 font-bold max-w-md">Olá {client?.nome}, aqui estão as {selectedPhotos.size} fotos que você escolheu. Elas já estão salvas em nosso sistema!</p>
               <div className={`px-6 py-3 rounded-full border text-[9px] font-black uppercase tracking-widest ${paymentStatus === 'pago' ? 'bg-emerald-600/10 border-emerald-600/30 text-emerald-600' : 'bg-red-600/10 border-red-600/30 text-red-600'}`}>
-                 {paymentStatus === 'pago' ? '✓ Downloads Liberados' : 'Aguardando Pagamento'}
+                 {paymentStatus === 'pago' ? '✓ Downloads Liberados' : 'Aguardando Aprovação / Pagamento'}
               </div>
            </header>
 
@@ -304,8 +323,9 @@ const PublicGallery: React.FC = () => {
               ))}
            </div>
            
-           <div className="bg-[#0a0a0a] p-10 md:p-16 rounded-[3rem] max-w-2xl mx-auto border border-white/5">
-              <Button variant="outline" className="w-full rounded-2xl py-6 font-black uppercase text-[10px] tracking-widest" onClick={() => setIsFinished(false)}>Revisar Minha Seleção</Button>
+           <div className="bg-[#0a0a0a] p-10 md:p-16 rounded-[3rem] max-w-2xl mx-auto border border-white/5 space-y-6">
+              <p className="text-slate-600 text-xs font-bold uppercase tracking-widest">Deseja alterar algo na sua escolha?</p>
+              <Button variant="outline" className="w-full rounded-2xl py-6 font-black uppercase text-[10px] tracking-widest" onClick={() => setIsFinished(false)}>Voltar e Editar Seleção</Button>
            </div>
         </main>
       )}
@@ -327,7 +347,7 @@ const PublicGallery: React.FC = () => {
                  const n = new Set(selectedPhotos); 
                  if(n.has(photo.id)) n.delete(photo.id); 
                  else {
-                   if(n.size >= (album?.max_selecoes || 999)) return alert("Limite atingido.");
+                   if(n.size >= (album?.max_selecoes || 999)) return alert("Você atingiu o limite de fotos deste álbum.");
                    n.add(photo.id);
                  }
                  setSelectedPhotos(n); 
@@ -345,15 +365,20 @@ const PublicGallery: React.FC = () => {
         </main>
       )}
 
-      {/* MODAL IDENTIFICAÇÃO */}
+      {/* MODAL IDENTIFICAÇÃO COM TEXTO MAIS CLARO */}
       {showIdentModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/98 backdrop-blur-3xl animate-in fade-in duration-500">
           <div className="bg-[#0a0a0a] border border-white/10 w-full max-w-md rounded-[3rem] p-12 text-center space-y-10">
-            <h3 className="text-3xl font-black text-white uppercase tracking-tighter">Sua Identificação</h3>
+            <div>
+              <h3 className="text-3xl font-black text-white uppercase tracking-tighter">Identificação</h3>
+              <p className="text-slate-600 text-[9px] font-black uppercase mt-4 tracking-widest leading-relaxed">
+                Insira seus dados para começar a escolher suas fotos ou para recuperar uma seleção já feita.
+              </p>
+            </div>
             <div className="space-y-4">
-              <input type="text" placeholder="Seu Nome" className="w-full bg-black border border-white/5 rounded-2xl px-8 py-5 text-white font-bold outline-none" value={clientForm.nome} onChange={e => setClientForm({...clientForm, nome: e.target.value})} />
-              <input type="text" placeholder="WhatsApp (Com DDD)" className="w-full bg-black border border-white/5 rounded-2xl px-8 py-5 text-white font-bold outline-none" value={clientForm.whatsapp} onChange={e => setClientForm({...clientForm, whatsapp: e.target.value})} />
-              <input type="email" placeholder="E-mail" className="w-full bg-black border border-white/5 rounded-2xl px-8 py-5 text-white font-bold outline-none" value={clientForm.email} onChange={e => setClientForm({...clientForm, email: e.target.value})} />
+              <input type="text" placeholder="Seu Nome" className="w-full bg-black border border-white/5 rounded-2xl px-8 py-5 text-white font-bold outline-none focus:ring-1 focus:ring-red-600/30" value={clientForm.nome} onChange={e => setClientForm({...clientForm, nome: e.target.value})} />
+              <input type="text" placeholder="WhatsApp (Com DDD)" className="w-full bg-black border border-white/5 rounded-2xl px-8 py-5 text-white font-bold outline-none focus:ring-1 focus:ring-red-600/30" value={clientForm.whatsapp} onChange={e => setClientForm({...clientForm, whatsapp: e.target.value})} />
+              <input type="email" placeholder="E-mail" className="w-full bg-black border border-white/5 rounded-2xl px-8 py-5 text-white font-bold outline-none focus:ring-1 focus:ring-red-600/30" value={clientForm.email} onChange={e => setClientForm({...clientForm, email: e.target.value})} />
             </div>
             <Button variant="primary" className="w-full py-6 rounded-3xl font-black uppercase text-xs" isLoading={identifying} onClick={handleIdentification}>Entrar na Galeria</Button>
             <button className="text-slate-700 text-[10px] font-black uppercase tracking-widest" onClick={() => setShowIdentModal(false)}>Voltar</button>
@@ -373,9 +398,10 @@ const PublicGallery: React.FC = () => {
           </div>
           <div className="mt-12">
              <Button 
-               variant={selectedPhotos.has(viewingPhoto.id) ? 'primary' : 'outline'} 
+               variant={selectedPhotos.has(viewingPhoto.id) ? 'primary' : 'premium'} 
                className="px-12 py-5 rounded-3xl font-black uppercase text-[10px] tracking-widest"
                onClick={() => {
+                 if(!client) return setShowIdentModal(true);
                  const n = new Set(selectedPhotos);
                  if(n.has(viewingPhoto.id)) n.delete(viewingPhoto.id);
                  else {
@@ -385,7 +411,7 @@ const PublicGallery: React.FC = () => {
                  setSelectedPhotos(n);
                }}
              >
-               {selectedPhotos.has(viewingPhoto.id) ? '✓ Foto Selecionada' : 'Adicionar à Seleção'}
+               {selectedPhotos.has(viewingPhoto.id) ? '✓ Foto Selecionada' : 'Adicionar à Minha Seleção'}
              </Button>
           </div>
         </div>
