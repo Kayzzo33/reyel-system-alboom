@@ -46,28 +46,32 @@ const PublicGallery: React.FC = () => {
   useEffect(() => {
     if (shareToken) fetchAlbum();
     
+    // BLOQUEIOS NATIVOS
     const block = (e: any) => e.preventDefault();
     document.addEventListener('contextmenu', block);
     document.addEventListener('dragstart', block);
     
-    // SISTEMA ANTI-PRINT ULTRA RÁPIDO
-    const triggerProtection = () => setIsProtected(true);
-    const releaseProtection = () => setTimeout(() => setIsProtected(false), 1000);
-
+    // SISTEMA ANTI-PRINT ULTRA RÁPIDO (MODO CAPTURA)
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Bloqueia instantaneamente se tocar em Shift, Control, Alt, Win/Cmd ou PrintScreen
+      // Bloqueio Imediato: Shift, Win (Meta), Ctrl, Alt ou PrintScreen
       if (e.shiftKey || e.ctrlKey || e.altKey || e.metaKey || e.key === 'PrintScreen') {
         setIsProtected(true);
       }
     };
 
     const handleKeyUp = () => {
-      // Mantém o bloqueio por 1s após soltar para garantir que o SO finalizou a ação
-      setTimeout(() => setIsProtected(false), 800);
+      // Mantém o bloqueio por um breve momento para limpar o buffer do SO
+      setTimeout(() => setIsProtected(false), 1200);
     };
 
+    // Usar 'true' no final habilita o modo CAPTURE (executa antes de tudo)
     window.addEventListener('keydown', handleKeyDown, true);
     window.addEventListener('keyup', handleKeyUp, true);
+    
+    // Proteção por perda de foco (Troca de aba ou Alt+Tab)
+    const triggerProtection = () => setIsProtected(true);
+    const releaseProtection = () => setTimeout(() => setIsProtected(false), 500);
+
     window.addEventListener('blur', triggerProtection);
     window.addEventListener('focus', releaseProtection);
     document.addEventListener('visibilitychange', () => {
@@ -78,8 +82,8 @@ const PublicGallery: React.FC = () => {
     return () => {
       document.removeEventListener('contextmenu', block);
       document.removeEventListener('dragstart', block);
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('keydown', handleKeyDown, true);
+      window.removeEventListener('keyup', handleKeyUp, true);
       window.removeEventListener('blur', triggerProtection);
       window.removeEventListener('focus', releaseProtection);
     };
@@ -227,8 +231,8 @@ const PublicGallery: React.FC = () => {
       
       {/* OVERLAY DE PROTEÇÃO (SÓ APARECE QUANDO ISPROTECTED) */}
       {isProtected && (
-        <div className="fixed inset-0 z-[200] bg-black/40 backdrop-blur-[60px] flex items-center justify-center pointer-events-none transition-all duration-75">
-          <div className="text-white font-black text-xs uppercase tracking-[0.5em] opacity-30">Captura Bloqueada</div>
+        <div className="fixed inset-0 z-[200] bg-black/50 backdrop-blur-[80px] flex items-center justify-center pointer-events-none transition-all duration-75">
+          <div className="text-white font-black text-xs uppercase tracking-[0.5em] opacity-40">Reyel Produções - Protegido</div>
         </div>
       )}
 
