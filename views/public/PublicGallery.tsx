@@ -35,7 +35,7 @@ const PublicGallery: React.FC = () => {
   const [clientForm, setClientForm] = useState({ nome: '', email: '', whatsapp: '' });
   const [identifying, setIdentifying] = useState(false);
   const [downloading, setDownloading] = useState<string | null>(null);
-  const [isProtected, setIsProtected] = useState(false); // Efeito anti-print
+  const [isProtected, setIsProtected] = useState(false); 
 
   const photosRef = useRef<HTMLElement>(null);
   const queryParams = new URLSearchParams(window.location.search);
@@ -46,29 +46,42 @@ const PublicGallery: React.FC = () => {
   useEffect(() => {
     if (shareToken) fetchAlbum();
     
-    // Bloqueios de segurança básicos
     const block = (e: any) => e.preventDefault();
     document.addEventListener('contextmenu', block);
     document.addEventListener('dragstart', block);
     
-    // Efeito Anti-Print (Borrar se perder o foco ou mudar aba)
-    const handleProtection = () => {
-      if (document.visibilityState === 'hidden' || !document.hasFocus()) {
+    // SISTEMA ANTI-PRINT ULTRA RÁPIDO
+    const triggerProtection = () => setIsProtected(true);
+    const releaseProtection = () => setTimeout(() => setIsProtected(false), 1000);
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Bloqueia instantaneamente se tocar em Shift, Control, Alt, Win/Cmd ou PrintScreen
+      if (e.shiftKey || e.ctrlKey || e.altKey || e.metaKey || e.key === 'PrintScreen') {
         setIsProtected(true);
-      } else {
-        setTimeout(() => setIsProtected(false), 500); // Delay suave ao voltar
       }
     };
 
-    window.addEventListener('blur', handleProtection);
-    window.addEventListener('focus', () => setIsProtected(false));
-    document.addEventListener('visibilitychange', handleProtection);
+    const handleKeyUp = () => {
+      // Mantém o bloqueio por 1s após soltar para garantir que o SO finalizou a ação
+      setTimeout(() => setIsProtected(false), 800);
+    };
+
+    window.addEventListener('keydown', handleKeyDown, true);
+    window.addEventListener('keyup', handleKeyUp, true);
+    window.addEventListener('blur', triggerProtection);
+    window.addEventListener('focus', releaseProtection);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') triggerProtection();
+      else releaseProtection();
+    });
 
     return () => {
       document.removeEventListener('contextmenu', block);
       document.removeEventListener('dragstart', block);
-      window.removeEventListener('blur', handleProtection);
-      document.removeEventListener('visibilitychange', handleProtection);
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', triggerProtection);
+      window.removeEventListener('focus', releaseProtection);
     };
   }, [shareToken]);
 
@@ -209,23 +222,29 @@ const PublicGallery: React.FC = () => {
     </div>
   );
 
-  // Layout da Galeria Publicada
   return (
-    <div className={`min-h-screen bg-[#000000] select-none transition-all duration-700 ${isProtected ? 'blur-[50px] pointer-events-none' : ''}`}>
+    <div className={`min-h-screen bg-[#000000] select-none`}>
       
-      {/* CAPA DO ÁLBUM (ESTILO ALBOOM) */}
+      {/* OVERLAY DE PROTEÇÃO (SÓ APARECE QUANDO ISPROTECTED) */}
+      {isProtected && (
+        <div className="fixed inset-0 z-[200] bg-black/40 backdrop-blur-[60px] flex items-center justify-center pointer-events-none transition-all duration-75">
+          <div className="text-white font-black text-xs uppercase tracking-[0.5em] opacity-30">Captura Bloqueada</div>
+        </div>
+      )}
+
+      {/* CAPA DO ÁLBUM */}
       {!isFinished && (
         <section className="h-screen w-full flex flex-col lg:flex-row bg-[#000000] relative overflow-hidden">
            <div className="w-full lg:w-1/2 h-full flex flex-col items-center justify-center p-8 md:p-20 space-y-12 text-center lg:text-left">
               <div className="space-y-6">
-                <p className="text-red-600 font-black uppercase text-[10px] md:text-xs tracking-[0.4em] animate-in slide-in-from-top duration-700">Reyel Barros de Almeida</p>
-                <h1 className="text-4xl md:text-7xl font-black text-white tracking-tighter leading-none uppercase animate-in slide-in-from-left duration-700 delay-100">{album?.nome_galeria}</h1>
-                <p className="text-slate-500 text-sm md:text-lg font-bold max-w-md leading-relaxed animate-in fade-in duration-700 delay-300">{album?.descricao || "Prepare-se para reviver momentos únicos e inesquecíveis capturados por nossas lentes."}</p>
-                <div className="pt-4 animate-in fade-in duration-700 delay-500">
+                <p className="text-red-600 font-black uppercase text-[10px] md:text-xs tracking-[0.4em]">Reyel Barros de Almeida</p>
+                <h1 className="text-4xl md:text-7xl font-black text-white tracking-tighter leading-none uppercase">{album?.nome_galeria}</h1>
+                <p className="text-slate-500 text-sm md:text-lg font-bold max-w-md leading-relaxed">{album?.descricao || "Prepare-se para reviver momentos únicos e inesquecíveis capturados por nossas lentes."}</p>
+                <div className="pt-4">
                    <p className="text-slate-700 text-[10px] font-black uppercase tracking-[0.2em]">{new Date(album?.data_evento || '').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
                 </div>
               </div>
-              <div className="animate-in slide-in-from-bottom duration-700 delay-700">
+              <div>
                 <Button variant="outline" className="rounded-none px-12 py-5 font-black uppercase text-[10px] tracking-widest border-red-600/50 text-red-600 hover:bg-red-600 hover:text-white" onClick={scrollToPhotos}>Ver Galeria</Button>
               </div>
            </div>
@@ -241,9 +260,9 @@ const PublicGallery: React.FC = () => {
         </section>
       )}
 
-      {/* HEADER FIXO DA GALERIA */}
+      {/* HEADER FIXO */}
       {!isFinished && (
-        <header className="sticky top-0 z-50 bg-[#000000]/80 backdrop-blur-3xl border-b border-white/5 px-6 py-6 md:py-8 flex justify-between items-center shadow-2xl">
+        <header className="sticky top-0 z-50 bg-[#000000]/80 backdrop-blur-3xl border-b border-white/5 px-6 py-6 md:py-8 flex justify-between items-center">
           <div className="flex items-center gap-4">
              <div className="w-12 h-12 bg-[#0a0a0a] rounded-xl border border-white/5 flex items-center justify-center overflow-hidden">
                {photographer?.logo_url ? <img src={photographer.logo_url} className="w-full h-full object-contain p-2" /> : <span className="text-red-600 font-black text-sm">R</span>}
@@ -253,13 +272,11 @@ const PublicGallery: React.FC = () => {
                <p className="text-[10px] text-slate-600 font-black mt-1.5 uppercase tracking-widest"><span className="text-red-600">{selectedPhotos.size}</span> / {album?.max_selecoes} SELECIONADAS</p>
              </div>
           </div>
-          <div className="flex items-center gap-4">
-            <Button variant="primary" className="rounded-xl px-6 md:px-10 py-4 font-black uppercase text-[10px] tracking-widest" isLoading={isFinishing} onClick={handleFinishSelection}>Finalizar</Button>
-          </div>
+          <Button variant="primary" className="rounded-xl px-6 md:px-10 py-4 font-black uppercase text-[10px] tracking-widest" isLoading={isFinishing} onClick={handleFinishSelection}>Finalizar</Button>
         </header>
       )}
 
-      {/* RESULTADO (APÓS FINALIZAR) */}
+      {/* RESULTADO */}
       {isFinished && (
         <main className="max-w-7xl mx-auto px-6 py-20 text-center space-y-16 animate-in fade-in duration-700">
            <header className="flex flex-col items-center gap-6">
@@ -290,7 +307,7 @@ const PublicGallery: React.FC = () => {
         </main>
       )}
 
-      {/* GRADE DE FOTOS (GALERIA PRINCIPAL) */}
+      {/* GRADE DE FOTOS */}
       {!isFinished && (
         <main ref={photosRef} className="max-w-7xl mx-auto px-4 md:px-6 py-12 md:py-24 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-4 md:gap-12">
           {photos.map(photo => (
@@ -301,14 +318,13 @@ const PublicGallery: React.FC = () => {
             >
                <img src={`${R2_CONFIG.publicUrl}/${photo.r2_key_thumbnail}`} className="w-full h-full object-cover" loading="lazy" />
                
-               {/* Checkmark de seleção */}
                <div className="absolute top-4 right-4 z-40" onClick={(e) => { 
                  e.stopPropagation(); 
                  if(!client) return setShowIdentModal(true); 
                  const n = new Set(selectedPhotos); 
                  if(n.has(photo.id)) n.delete(photo.id); 
                  else {
-                   if(n.size >= (album?.max_selecoes || 999)) return alert("Limite de fotos atingido.");
+                   if(n.size >= (album?.max_selecoes || 999)) return alert("Limite atingido.");
                    n.add(photo.id);
                  }
                  setSelectedPhotos(n); 
@@ -318,7 +334,6 @@ const PublicGallery: React.FC = () => {
                   </div>
                </div>
                
-               {/* Marca d'água de proteção */}
                <div className="absolute inset-0 flex items-center justify-center opacity-10 pointer-events-none p-10 rotate-[-20deg] grayscale contrast-200">
                   {photographer?.marca_dagua_url ? <img src={photographer.marca_dagua_url} className="w-full h-full object-contain" /> : <span className="text-white/5 font-black text-2xl uppercase tracking-[1em]">REYEL PRODUÇÕES</span>}
                </div>
@@ -327,7 +342,7 @@ const PublicGallery: React.FC = () => {
         </main>
       )}
 
-      {/* MODAIS (IDENTIFICAÇÃO E VISUALIZAÇÃO) */}
+      {/* MODAL IDENTIFICAÇÃO */}
       {showIdentModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/98 backdrop-blur-3xl animate-in fade-in duration-500">
           <div className="bg-[#0a0a0a] border border-white/10 w-full max-w-md rounded-[3rem] p-12 text-center space-y-10">
@@ -343,6 +358,7 @@ const PublicGallery: React.FC = () => {
         </div>
       )}
 
+      {/* MODAL VISUALIZAÇÃO */}
       {viewingPhoto && (
         <div className="fixed inset-0 z-[110] bg-black/99 backdrop-blur-3xl flex flex-col items-center justify-center p-4 animate-in fade-in duration-500">
           <button className="absolute top-8 right-8 p-4 text-white/40 font-black text-[10px] uppercase tracking-widest" onClick={() => setViewingPhoto(null)}>Fechar Visualização</button>
@@ -372,11 +388,10 @@ const PublicGallery: React.FC = () => {
         </div>
       )}
 
-      {/* PROTEÇÃO ADICIONAL VIA CSS GLOBAL */}
       <style>{`
         @media print {
-          body { filter: blur(40px) !important; pointer-events: none !important; }
-          img { display: none !important; }
+          body { filter: blur(100px) !important; pointer-events: none !important; }
+          img, section, header, main { display: none !important; }
         }
         ::selection { background: #ff0000; color: white; }
       `}</style>

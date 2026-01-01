@@ -11,6 +11,7 @@ const Albums: React.FC<{ initialOpenModal?: boolean; onModalClose?: () => void }
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   const [step, setStep] = useState(1);
   
   const [selectedAlbum, setSelectedAlbum] = useState<Album | null>(null);
@@ -39,6 +40,8 @@ const Albums: React.FC<{ initialOpenModal?: boolean; onModalClose?: () => void }
     fetchAlbums();
     fetchProfile();
     if (initialOpenModal) {
+      setStep(1);
+      setIsEditing(false);
       setIsModalOpen(true);
       if (onModalClose) onModalClose();
     }
@@ -73,23 +76,36 @@ const Albums: React.FC<{ initialOpenModal?: boolean; onModalClose?: () => void }
     } catch (err) { alert("Erro ao subir capa"); } finally { setUploadingCapa(false); }
   };
 
-  const handleCreateAlbum = async () => {
+  const handleSaveAlbum = async () => {
     if (!newAlbum.nome_galeria || !newAlbum.nome) return alert('Nome do álbum é obrigatório.');
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      const { data, error } = await supabase.from('albums').insert([{
-        ...newAlbum,
-        photographer_id: user?.id,
-        share_token: Math.random().toString(36).substring(2, 10),
-        ativo: true
-      }]).select().single();
-      if (error) throw error;
-      setCreatedAlbumId(data.id);
-      setStep(2);
-      fetchAlbums();
+      
+      if (isEditing && selectedAlbum) {
+        const { error } = await supabase.from('albums').update({
+          ...newAlbum
+        }).eq('id', selectedAlbum.id);
+        if (error) throw error;
+        alert("Álbum atualizado com sucesso!");
+        setIsModalOpen(false);
+        const updated = { ...selectedAlbum, ...newAlbum };
+        setSelectedAlbum(updated as Album);
+        fetchAlbums();
+      } else {
+        const { data, error } = await supabase.from('albums').insert([{
+          ...newAlbum,
+          photographer_id: user?.id,
+          share_token: Math.random().toString(36).substring(2, 10),
+          ativo: true
+        }]).select().single();
+        if (error) throw error;
+        setCreatedAlbumId(data.id);
+        setStep(2);
+        fetchAlbums();
+      }
     } catch (err) { 
       console.error(err);
-      alert('Erro ao criar álbum.'); 
+      alert('Erro ao salvar álbum.'); 
     }
   };
 
@@ -135,6 +151,23 @@ const Albums: React.FC<{ initialOpenModal?: boolean; onModalClose?: () => void }
     } finally { setLoadingPhotos(false); }
   };
 
+  const openEditModal = () => {
+    if (!selectedAlbum) return;
+    setNewAlbum({
+      nome: selectedAlbum.nome,
+      nome_galeria: selectedAlbum.nome_galeria,
+      descricao: selectedAlbum.descricao || '',
+      categoria: selectedAlbum.categoria,
+      preco_por_foto: selectedAlbum.preco_por_foto,
+      max_selecoes: selectedAlbum.max_selecoes,
+      data_evento: selectedAlbum.data_evento,
+      capa_url: selectedAlbum.capa_url || ''
+    });
+    setIsEditing(true);
+    setStep(1);
+    setIsModalOpen(true);
+  };
+
   const handleDeleteAlbum = async (albumId: string) => {
     if (!confirm("⚠️ Excluir este álbum permanentemente?")) return;
     try {
@@ -156,6 +189,9 @@ const Albums: React.FC<{ initialOpenModal?: boolean; onModalClose?: () => void }
             </div>
           </div>
           <div className="flex flex-wrap gap-3 lg:ml-auto">
+             <Button variant="ghost" className="rounded-xl text-xs border border-white/10 text-white" onClick={openEditModal}>
+               {ICONS.Config} <span className="ml-2">Configurações</span>
+             </Button>
              <Button variant="ghost" className="rounded-xl text-xs border border-white/10 text-white" onClick={() => fileInputRef.current?.click()}>
                {ICONS.Plus} <span className="ml-2">Add Fotos</span>
              </Button>
@@ -195,7 +231,7 @@ const Albums: React.FC<{ initialOpenModal?: boolean; onModalClose?: () => void }
           <h2 className="text-3xl font-black text-white tracking-tighter uppercase">Meus Álbuns</h2>
           <p className="text-slate-600 font-medium text-sm">Gerencie suas entregas profissionais.</p>
         </div>
-        <Button variant="primary" className="rounded-2xl px-8 py-4 font-black text-xs uppercase shadow-2xl" onClick={() => { setStep(1); setIsModalOpen(true); }}>
+        <Button variant="primary" className="rounded-2xl px-8 py-4 font-black text-xs uppercase shadow-2xl" onClick={() => { setStep(1); setIsEditing(false); setIsModalOpen(true); }}>
           {ICONS.Plus} Criar Galeria
         </Button>
       </header>
@@ -225,7 +261,7 @@ const Albums: React.FC<{ initialOpenModal?: boolean; onModalClose?: () => void }
              {step === 1 ? (
                <div className="space-y-10">
                  <div>
-                   <h3 className="text-3xl font-black text-white uppercase tracking-tighter">Configurar Galeria</h3>
+                   <h3 className="text-3xl font-black text-white uppercase tracking-tighter">{isEditing ? 'Editar Configurações' : 'Configurar Galeria'}</h3>
                    <p className="text-slate-600 text-xs font-bold mt-2 uppercase tracking-widest">Defina como o cliente verá o trabalho.</p>
                  </div>
                  
@@ -281,7 +317,9 @@ const Albums: React.FC<{ initialOpenModal?: boolean; onModalClose?: () => void }
                    </div>
                  </div>
                  
-                 <Button variant="primary" className="w-full py-6 rounded-3xl font-black uppercase text-xs shadow-2xl shadow-red-900/40" onClick={handleCreateAlbum}>Salvar e Ir para Fotos</Button>
+                 <Button variant="primary" className="w-full py-6 rounded-3xl font-black uppercase text-xs shadow-2xl shadow-red-900/40" onClick={handleSaveAlbum}>
+                    {isEditing ? 'Salvar Alterações' : 'Salvar e Ir para Fotos'}
+                 </Button>
                </div>
              ) : (
                <div className="text-center py-20 space-y-10">
