@@ -37,6 +37,7 @@ export interface Album {
   created_at: string;
   photo_count?: number;
   photos?: any[];
+  capa_url?: string;
 }
 
 export interface Photo {
