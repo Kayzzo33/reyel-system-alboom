@@ -40,7 +40,6 @@ const PublicGallery: React.FC = () => {
   const [clientForm, setClientForm] = useState({ nome: '', email: '', whatsapp: '' });
   const [identifying, setIdentifying] = useState(false);
   const [isProtected, setIsProtected] = useState(false); 
-  const [noSelectionAlert, setNoSelectionAlert] = useState(false);
 
   const photosRef = useRef<HTMLElement>(null);
   const queryParams = new URLSearchParams(window.location.search);
@@ -56,18 +55,32 @@ const PublicGallery: React.FC = () => {
     document.addEventListener('contextmenu', block);
     document.addEventListener('dragstart', block);
     
-    // Blindagem Anti-Print Instantânea
-    const triggerProtection = () => setIsProtected(true);
-    const releaseProtection = () => setIsProtected(false);
+    // Blindagem Anti-Print Ultra Rápida
+    const triggerProtection = () => {
+      setIsProtected(true);
+      // Forçamos o CSS a aplicar instantaneamente removendo transições pesadas no disparo
+      document.body.style.overflow = 'hidden';
+    };
+    
+    const releaseProtection = () => {
+      setIsProtected(false);
+      document.body.style.overflow = '';
+    };
 
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'PrintScreen' || (e.ctrlKey && e.key === 'p') || (e.metaKey && e.shiftKey && e.key === '4') || (e.metaKey && e.shiftKey && e.key === '3')) {
+      // Combinações comuns de print e ferramentas de captura
+      if (
+        e.key === 'PrintScreen' || 
+        (e.ctrlKey && e.key === 'p') || 
+        (e.metaKey && e.shiftKey && (e.key === '4' || e.key === '3' || e.key === '5')) ||
+        (e.ctrlKey && e.shiftKey && e.key === 'I') // Bloquear inspeção rápida
+      ) {
         triggerProtection();
       }
     };
 
     window.addEventListener('keydown', handleKey);
-    window.addEventListener('blur', triggerProtection);
+    window.addEventListener('blur', triggerProtection); // Perdeu o foco = Blindagem instantânea
     window.addEventListener('focus', releaseProtection);
     
     return () => {
@@ -108,10 +121,8 @@ const PublicGallery: React.FC = () => {
           
         if (pStat) setPaymentStatus(pStat.status);
         return true;
-      } else {
-        if (autoRedirect) setNoSelectionAlert(true);
-        return false;
       }
+      return false;
     } catch (e) { console.error("Erro seleção:", e); return false; }
   };
 
@@ -161,7 +172,6 @@ const PublicGallery: React.FC = () => {
         if (identModalReason === 'access') {
           checkExistingSelection(true);
         } else if (viewingPhoto) {
-          // Se estava selecionando uma foto específica no modal, adiciona ela agora
           togglePhotoSelection(viewingPhoto.id);
         }
       }
@@ -222,16 +232,17 @@ const PublicGallery: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#000000] select-none overflow-x-hidden">
       
-      {/* OVERLAY DE PROTEÇÃO ULTRA-AGRESSIVA */}
+      {/* OVERLAY DE PROTEÇÃO SEM DELAY */}
       {isProtected && (
-        <div className="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-[150px] flex items-center justify-center pointer-events-none transition-all duration-75">
+        <div className="fixed inset-0 z-[10000] bg-black flex flex-col items-center justify-center pointer-events-none">
+          <div className="w-20 h-20 bg-red-600/20 rounded-full animate-ping mb-8"></div>
           <div className="text-white font-black text-xs uppercase tracking-[1em] opacity-40 text-center px-10">
-            PROTEÇÃO ATIVADA<br/><span className="text-[8px] tracking-[0.2em] block mt-4">REYEL PRODUÇÕES</span>
+            PROTEÇÃO ATIVADA<br/><span className="text-[8px] tracking-[0.2em] block mt-4 text-red-600">CAPTURA DE TELA BLOQUEADA</span>
           </div>
         </div>
       )}
 
-      {/* CAPA DO ÁLBUM - SÓ EXPLORAR GALERIA */}
+      {/* CAPA DO ÁLBUM - APENAS EXPLORAR GALERIA */}
       {!isFinished && (
         <section className="h-screen w-full flex flex-col lg:flex-row bg-[#000000] relative overflow-hidden">
            <div className="w-full lg:w-1/2 h-full flex flex-col items-center justify-center p-8 md:p-20 space-y-12 text-center lg:text-left z-10">
@@ -241,12 +252,12 @@ const PublicGallery: React.FC = () => {
                 <p className="text-slate-500 text-sm md:text-lg font-bold max-w-md leading-relaxed">{album?.descricao || "Prepare-se para reviver momentos únicos e inesquecíveis capturados por nossas lentes."}</p>
               </div>
               <div className="w-full md:w-auto">
-                <Button variant="primary" size="lg" className="px-16 py-6 rounded-2xl w-full md:w-auto" onClick={scrollToPhotos}>Explorar Galeria</Button>
+                <Button variant="primary" size="lg" className="px-16 py-6 rounded-2xl w-full md:w-auto shadow-[0_0_50px_rgba(255,0,0,0.3)]" onClick={scrollToPhotos}>Explorar Galeria</Button>
               </div>
            </div>
            <div className="w-full lg:w-1/2 h-full relative group">
               {album?.capa_url ? (
-                <img src={album.capa_url} className="w-full h-full object-cover scale-105 group-hover:scale-100 transition-transform duration-[2000ms]" alt="Capa" />
+                <img src={album.capa_url} className="w-full h-full object-cover scale-105 group-hover:scale-100 transition-transform duration-[3000ms]" alt="Capa" />
               ) : (
                 <div className="w-full h-full bg-[#0a0a0a] flex items-center justify-center text-slate-800 font-black uppercase tracking-[1em]">Reyel Produções</div>
               )}
@@ -258,9 +269,9 @@ const PublicGallery: React.FC = () => {
 
       {/* HEADER FIXO */}
       {!isFinished && (
-        <header className="sticky top-0 z-50 bg-[#000000]/80 backdrop-blur-3xl border-b border-white/5 px-4 md:px-10 py-4 flex justify-between items-center">
+        <header className="sticky top-0 z-50 bg-[#000000]/90 backdrop-blur-3xl border-b border-white/5 px-4 md:px-10 py-4 flex justify-between items-center">
           <div className="flex items-center gap-4">
-             <div className="w-10 h-10 md:w-12 md:h-12 bg-[#0a0a0a] rounded-xl border border-white/5 flex items-center justify-center overflow-hidden">
+             <div className="w-10 h-10 md:w-12 md:h-12 bg-[#0a0a0a] rounded-xl border border-white/5 flex items-center justify-center overflow-hidden shadow-2xl">
                {photographer?.logo_url ? <img src={photographer.logo_url} className="w-full h-full object-contain p-2" /> : <span className="text-red-600 font-black text-sm">R</span>}
              </div>
              <div className="hidden sm:block">
@@ -269,21 +280,21 @@ const PublicGallery: React.FC = () => {
              </div>
           </div>
           <div className="flex items-center gap-2 md:gap-4">
-             <Button variant="premium" size="sm" className="rounded-xl px-4 md:px-8 py-3 md:py-4 font-black uppercase text-[8px] md:text-[10px] tracking-widest" onClick={handleAccessMySelection}>Minhas Escolhas</Button>
-             <Button variant="primary" className="rounded-xl px-4 md:px-8 py-3 md:py-4 font-black uppercase text-[8px] md:text-[10px] tracking-widest" isLoading={isFinishing} onClick={handleFinishSelection}>
-               {client ? "Confirmar Escolhas" : "Iniciar Seleção"}
+             <Button variant="premium" size="sm" className="rounded-xl px-4 md:px-8 py-3 md:py-4" onClick={handleAccessMySelection}>Minhas Escolhas</Button>
+             <Button variant="primary" className="rounded-xl px-4 md:px-8 py-3 md:py-4 shadow-lg shadow-red-900/30" isLoading={isFinishing} onClick={handleFinishSelection}>
+               {client ? "Confirmar Seleção" : "Iniciar Seleção"}
              </Button>
           </div>
         </header>
       )}
 
-      {/* TELA FINALIZADO / RESUMO */}
+      {/* TELA DE RESUMO FINAL */}
       {isFinished && (
         <main className="max-w-7xl mx-auto px-6 py-12 md:py-20 text-center space-y-12 animate-in fade-in duration-700">
            <header className="flex flex-col items-center gap-6">
-              <div className="w-20 h-20 bg-emerald-600/10 text-emerald-600 rounded-3xl flex items-center justify-center border border-emerald-600/20">{ICONS.Check}</div>
-              <h1 className="text-4xl md:text-6xl font-black text-white tracking-tighter uppercase">Seleção Salva</h1>
-              <p className="text-slate-500 font-bold max-w-md">Olá {client?.nome}, suas {selectedPhotos.size} fotos escolhidas estão seguras.</p>
+              <div className="w-20 h-20 bg-emerald-600/10 text-emerald-600 rounded-3xl flex items-center justify-center border border-emerald-600/20 shadow-2xl shadow-emerald-600/10">{ICONS.Check}</div>
+              <h1 className="text-4xl md:text-6xl font-black text-white tracking-tighter uppercase">Seleção Concluída</h1>
+              <p className="text-slate-500 font-bold max-w-md">Olá {client?.nome}, suas {selectedPhotos.size} fotos foram salvas com sucesso em nossa base.</p>
            </header>
            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-8">
               {photos.filter(p => selectedPhotos.has(p.id)).map(photo => (
@@ -293,19 +304,19 @@ const PublicGallery: React.FC = () => {
               ))}
            </div>
            <div className="bg-[#0a0a0a] p-10 md:p-16 rounded-[3rem] max-w-2xl mx-auto border border-white/5 space-y-8">
-              <Button variant="outline" className="w-full rounded-2xl py-6 font-black uppercase text-[10px] tracking-widest" onClick={() => setIsFinished(false)}>Revisar Fotos</Button>
+              <Button variant="outline" className="w-full rounded-2xl py-6 font-black uppercase text-[10px] tracking-widest" onClick={() => setIsFinished(false)}>Revisar Minhas Fotos</Button>
               <button className="text-slate-800 text-[9px] font-black uppercase tracking-widest hover:text-red-600 transition-colors" onClick={() => { clearSession(); window.location.reload(); }}>Sair do meu perfil</button>
            </div>
         </main>
       )}
 
-      {/* GRADE DE FOTOS DO CLIENTE - SEM NOMES DE ARQUIVO */}
+      {/* GRADE DE FOTOS DO CLIENTE - NOMES REMOVIDOS DEFINITIVAMENTE */}
       {!isFinished && (
         <main ref={photosRef} className="max-w-7xl mx-auto px-4 md:px-6 py-8 md:py-20 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-4 md:gap-10">
           {photos.map(photo => (
             <div 
               key={photo.id} 
-              className={`relative aspect-[3/4] bg-[#0a0a0a] rounded-3xl overflow-hidden cursor-pointer group shadow-2xl transition-all duration-500 ring-1 ${selectedPhotos.has(photo.id) ? 'ring-red-600 scale-105' : 'ring-white/5'}`}
+              className={`relative aspect-[3/4] bg-[#0a0a0a] rounded-3xl overflow-hidden cursor-pointer group shadow-2xl transition-all duration-500 ring-2 ${selectedPhotos.has(photo.id) ? 'ring-red-600 scale-105' : 'ring-white/5'}`}
               onClick={() => setViewingPhoto(photo)}
             >
                <img src={`${R2_CONFIG.publicUrl}/${photo.r2_key_thumbnail}`} className="w-full h-full object-cover" loading="lazy" />
@@ -319,7 +330,7 @@ const PublicGallery: React.FC = () => {
                   </div>
                </div>
                
-               <div className="absolute inset-0 flex items-center justify-center opacity-25 pointer-events-none p-10 rotate-[-15deg]">
+               <div className="absolute inset-0 flex items-center justify-center opacity-30 pointer-events-none p-10 rotate-[-15deg]">
                   {photographer?.marca_dagua_url ? <img src={photographer.marca_dagua_url} className="w-full h-full object-contain" /> : <span className="text-white font-black text-xl uppercase tracking-[1em]">REYEL</span>}
                </div>
             </div>
@@ -327,10 +338,10 @@ const PublicGallery: React.FC = () => {
         </main>
       )}
 
-      {/* MODAL IDENTIFICAÇÃO - SEMPRE POR CIMA DE TUDO */}
+      {/* MODAL IDENTIFICAÇÃO - PRIORIDADE MÁXIMA (Z-10000) */}
       {showIdentModal && (
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-6 bg-black/98 backdrop-blur-3xl animate-in fade-in duration-500">
-          <div className="bg-[#0a0a0a] border border-white/10 w-full max-w-md rounded-[3rem] p-10 text-center space-y-8">
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-6 bg-black/98 backdrop-blur-[50px] animate-in fade-in duration-300">
+          <div className="bg-[#0a0a0a] border border-white/10 w-full max-w-md rounded-[3rem] p-10 text-center space-y-8 shadow-[0_0_100px_rgba(255,0,0,0.15)]">
             <h3 className="text-3xl font-black text-white uppercase tracking-tighter">
               {identModalReason === 'access' ? 'Recuperar Escolhas' : 'Identificação'}
             </h3>
@@ -348,38 +359,27 @@ const PublicGallery: React.FC = () => {
                 <input type="email" className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 text-white font-bold outline-none focus:ring-1 focus:ring-red-600/30" value={clientForm.email} onChange={e => setClientForm({...clientForm, email: e.target.value})} />
               </div>
             </div>
-            <Button variant="primary" className="w-full py-6 rounded-2xl font-black uppercase text-xs" isLoading={identifying} onClick={handleIdentification}>Continuar</Button>
-            <button className="text-slate-700 text-[9px] font-black uppercase tracking-widest" onClick={() => setShowIdentModal(false)}>Voltar</button>
+            <Button variant="primary" className="w-full py-6 rounded-2xl font-black shadow-xl" isLoading={identifying} onClick={handleIdentification}>Entrar na Galeria</Button>
+            <button className="text-slate-700 text-[9px] font-black uppercase tracking-widest hover:text-white transition-colors" onClick={() => setShowIdentModal(false)}>Fechar</button>
           </div>
         </div>
       )}
 
-      {/* MODAL SEM SELEÇÃO */}
-      {noSelectionAlert && (
-        <div className="fixed inset-0 z-[11000] flex items-center justify-center p-6 bg-black/95 backdrop-blur-2xl animate-in zoom-in-95">
-           <div className="bg-[#0a0a0a] border border-white/10 w-full max-w-sm rounded-[3rem] p-12 text-center space-y-6">
-              <h4 className="text-xl font-black text-white uppercase tracking-tight">Vazio</h4>
-              <p className="text-slate-600 text-[10px] font-black uppercase tracking-widest leading-relaxed">Não encontramos fotos salvas para seus dados ainda.</p>
-              <Button variant="primary" className="w-full py-5 rounded-2xl font-black uppercase text-[10px]" onClick={() => setNoSelectionAlert(false)}>Iniciar agora</Button>
-           </div>
-        </div>
-      )}
-
-      {/* VISUALIZAÇÃO AMPLIADA - SEM NOME DO ARQUIVO PARA CLIENTE */}
+      {/* VISUALIZAÇÃO AMPLIADA - PREMIUM REESTABELECIDO */}
       {viewingPhoto && (
         <div className="fixed inset-0 z-[1200] bg-black/99 backdrop-blur-3xl flex flex-col items-center justify-center p-4 md:p-10 animate-in fade-in duration-300">
           <header className="absolute top-0 left-0 right-0 p-6 md:p-10 flex justify-between items-center z-[1300]">
              <div className="flex flex-col">
                 <span className="text-red-600 text-[8px] font-black uppercase tracking-[0.3em]">Visualização Protegida</span>
              </div>
-             <button className="w-12 h-12 md:w-16 md:h-16 bg-white/5 text-white rounded-2xl flex items-center justify-center hover:bg-red-600 transition-all" onClick={() => setViewingPhoto(null)}>
+             <button className="w-12 h-12 md:w-16 md:h-16 bg-white/5 text-white rounded-2xl flex items-center justify-center hover:bg-red-600 transition-all shadow-2xl" onClick={() => setViewingPhoto(null)}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
              </button>
           </header>
 
           <div className="relative max-h-[70vh] md:max-h-[80vh] w-full flex justify-center z-[1250]">
-            <img src={`${R2_CONFIG.publicUrl}/${viewingPhoto.r2_key_original}`} className="max-h-[70vh] md:max-h-[80vh] object-contain pointer-events-none rounded-2xl border border-white/5" />
-            <div className="absolute inset-0 flex items-center justify-center opacity-40 p-10 md:p-20 rotate-[-15deg] pointer-events-none grayscale">
+            <img src={`${R2_CONFIG.publicUrl}/${viewingPhoto.r2_key_original}`} className="max-h-[70vh] md:max-h-[80vh] object-contain pointer-events-none rounded-3xl border border-white/5 shadow-3xl" />
+            <div className="absolute inset-0 flex items-center justify-center opacity-45 p-10 md:p-20 rotate-[-15deg] pointer-events-none grayscale">
               {photographer?.marca_dagua_url ? <img src={photographer.marca_dagua_url} className="w-full h-full object-contain" /> : <span className="text-white font-black text-6xl uppercase tracking-[1em]">REYEL PRODUÇÕES</span>}
             </div>
           </div>
@@ -387,7 +387,7 @@ const PublicGallery: React.FC = () => {
           <div className="mt-12 z-[1300]">
              <Button 
                variant={selectedPhotos.has(viewingPhoto.id) ? 'primary' : 'premium'} 
-               className="px-16 py-6 rounded-2xl font-black uppercase text-[10px] tracking-[0.2em]"
+               className="px-16 py-6 rounded-3xl font-black uppercase text-[10px] tracking-[0.2em] shadow-[0_0_40px_rgba(255,0,0,0.2)]"
                onClick={() => togglePhotoSelection(viewingPhoto.id)}
              >
                {selectedPhotos.has(viewingPhoto.id) ? '✓ Foto Selecionada' : 'Adicionar à Seleção'}
