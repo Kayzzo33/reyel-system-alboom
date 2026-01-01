@@ -56,17 +56,34 @@ const PublicGallery: React.FC = () => {
     document.addEventListener('contextmenu', block);
     document.addEventListener('dragstart', block);
     
-    const triggerProtection = () => setIsProtected(true);
-    const releaseProtection = () => setTimeout(() => setIsProtected(false), 1000);
+    const triggerProtection = () => {
+      setIsProtected(true);
+      document.body.style.filter = 'blur(100px)';
+    };
+    const releaseProtection = () => {
+      setTimeout(() => {
+        setIsProtected(false);
+        document.body.style.filter = 'none';
+      }, 500);
+    };
 
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'PrintScreen' || (e.ctrlKey && e.key === 'p') || (e.metaKey && e.shiftKey && e.key === '4')) {
+        triggerProtection();
+      }
+    };
+
+    window.addEventListener('keydown', handleKey);
     window.addEventListener('blur', triggerProtection);
     window.addEventListener('focus', releaseProtection);
     
     return () => {
       document.removeEventListener('contextmenu', block);
       document.removeEventListener('dragstart', block);
+      window.removeEventListener('keydown', handleKey);
       window.removeEventListener('blur', triggerProtection);
       window.removeEventListener('focus', releaseProtection);
+      document.body.style.filter = 'none';
     };
   }, [shareToken]);
 
@@ -149,7 +166,6 @@ const PublicGallery: React.FC = () => {
       if (existingClient) {
         saveSession(existingClient);
         setShowIdentModal(false);
-        // Se o motivo foi acessar, tentar redirecionar após o login
         if (identModalReason === 'access') {
           checkExistingSelection(true);
         }
@@ -233,8 +249,8 @@ const PublicGallery: React.FC = () => {
     <div className="min-h-screen bg-[#000000] select-none overflow-x-hidden">
       
       {isProtected && (
-        <div className="fixed inset-0 z-[500] bg-black/70 backdrop-blur-[100px] flex items-center justify-center pointer-events-none">
-          <div className="text-white font-black text-[10px] uppercase tracking-[1em] opacity-40 text-center px-6">Reyel Produções - Protegido</div>
+        <div className="fixed inset-0 z-[1000] bg-black/90 backdrop-blur-[100px] flex items-center justify-center pointer-events-none">
+          <div className="text-white font-black text-xs uppercase tracking-[1em] opacity-40 text-center px-6">Reyel Produções - Protegido</div>
         </div>
       )}
 
@@ -267,7 +283,7 @@ const PublicGallery: React.FC = () => {
         </section>
       )}
 
-      {/* HEADER FIXO COM LOGO E CONTROLES */}
+      {/* HEADER FIXO */}
       {!isFinished && (
         <header className="sticky top-0 z-50 bg-[#000000]/80 backdrop-blur-3xl border-b border-white/5 px-4 md:px-10 py-4 flex justify-between items-center">
           <div className="flex items-center gap-4">
@@ -302,7 +318,7 @@ const PublicGallery: React.FC = () => {
         </header>
       )}
 
-      {/* TELA DE RESUMO / FINALIZADO */}
+      {/* TELA FINALIZADO */}
       {isFinished && (
         <main className="max-w-7xl mx-auto px-6 py-12 md:py-20 text-center space-y-12 animate-in fade-in duration-700">
            <header className="flex flex-col items-center gap-6">
@@ -321,26 +337,18 @@ const PublicGallery: React.FC = () => {
                    <div className="absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-md p-3">
                       <p className="text-[8px] font-black text-white/50 uppercase tracking-widest truncate">{photo.filename}</p>
                    </div>
-                   {paymentStatus === 'pago' && (
-                     <button onClick={(e) => forceDownload(e, photo)} className="absolute top-4 right-4 w-10 h-10 bg-red-600 text-white rounded-xl flex items-center justify-center shadow-2xl transition-all hover:scale-110 z-50">
-                        {downloading === photo.id ? <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></div> : ICONS.Download}
-                     </button>
-                   )}
                 </div>
               ))}
            </div>
            
            <div className="bg-[#0a0a0a] p-10 md:p-16 rounded-[3rem] max-w-2xl mx-auto border border-white/5 space-y-8">
-              <div>
-                <p className="text-slate-600 text-[10px] font-black uppercase tracking-widest mb-4">Deseja revisar ou adicionar mais fotos?</p>
-                <Button variant="outline" className="w-full rounded-2xl py-6 font-black uppercase text-[10px] tracking-widest" onClick={() => setIsFinished(false)}>Voltar para a Galeria</Button>
-              </div>
+              <Button variant="outline" className="w-full rounded-2xl py-6 font-black uppercase text-[10px] tracking-widest" onClick={() => setIsFinished(false)}>Voltar para a Galeria</Button>
               <button className="text-slate-800 text-[9px] font-black uppercase tracking-widest hover:text-red-600 transition-colors" onClick={() => { clearSession(); window.location.reload(); }}>Sair do meu perfil</button>
            </div>
         </main>
       )}
 
-      {/* GRADE DE FOTOS COM IDENTIFICAÇÃO DO ARQUIVO */}
+      {/* GRADE DE FOTOS */}
       {!isFinished && (
         <main ref={photosRef} className="max-w-7xl mx-auto px-4 md:px-6 py-8 md:py-20 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-4 md:gap-10">
           {photos.map(photo => (
@@ -351,22 +359,17 @@ const PublicGallery: React.FC = () => {
             >
                <img src={`${R2_CONFIG.publicUrl}/${photo.r2_key_thumbnail}`} className="w-full h-full object-cover" loading="lazy" />
                
-               {/* Nome do Arquivo na Grade */}
                <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent translate-y-2 group-hover:translate-y-0 transition-transform">
                   <span className="text-[8px] font-black text-white/40 uppercase tracking-widest">{photo.filename}</span>
                </div>
 
-               {/* Botão Selecionar */}
                <div className="absolute top-4 right-4 z-40" onClick={(e) => { 
                  e.stopPropagation(); 
-                 if(!client) {
-                   setIdentModalReason('start');
-                   return setShowIdentModal(true);
-                 }
+                 if(!client) return setShowIdentModal(true);
                  const n = new Set(selectedPhotos); 
                  if(n.has(photo.id)) n.delete(photo.id); 
                  else {
-                   if(n.size >= (album?.max_selecoes || 999)) return alert("Limite de fotos atingido.");
+                   if(n.size >= (album?.max_selecoes || 999)) return alert("Limite atingido.");
                    n.add(photo.id);
                  }
                  setSelectedPhotos(n); 
@@ -376,7 +379,7 @@ const PublicGallery: React.FC = () => {
                   </div>
                </div>
                
-               <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none p-10 rotate-[-15deg]">
+               <div className="absolute inset-0 flex items-center justify-center opacity-25 pointer-events-none p-10 rotate-[-15deg]">
                   {photographer?.marca_dagua_url ? <img src={photographer.marca_dagua_url} className="w-full h-full object-contain" /> : <span className="text-white font-black text-xl uppercase tracking-[1em]">REYEL</span>}
                </div>
             </div>
@@ -384,77 +387,56 @@ const PublicGallery: React.FC = () => {
         </main>
       )}
 
-      {/* MODAL IDENTIFICAÇÃO DINÂMICO */}
+      {/* MODAL IDENTIFICAÇÃO */}
       {showIdentModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/98 backdrop-blur-3xl animate-in fade-in duration-500">
-          <div className="bg-[#0a0a0a] border border-white/10 w-full max-w-md rounded-[3rem] p-10 md:p-14 text-center space-y-8">
-            <div className="space-y-4">
-              <div className="w-16 h-16 bg-red-600/10 text-red-600 rounded-2xl flex items-center justify-center mx-auto border border-red-600/20">{ICONS.Clients}</div>
-              <h3 className="text-3xl font-black text-white uppercase tracking-tighter">
-                {identModalReason === 'access' ? 'Recuperar Seleção' : 'Identificação'}
-              </h3>
-              <p className="text-slate-600 text-[10px] font-black uppercase tracking-widest leading-relaxed">
-                {identModalReason === 'access' 
-                  ? 'Insira seus dados para acessar as fotos que você já salvou anteriormente.' 
-                  : 'Olá! Identifique-se para começar a escolher suas fotos favoritas desta galeria.'}
-              </p>
-            </div>
+        <div className="fixed inset-0 z-[1100] flex items-center justify-center p-6 bg-black/98 backdrop-blur-3xl animate-in fade-in duration-500">
+          <div className="bg-[#0a0a0a] border border-white/10 w-full max-w-md rounded-[3rem] p-10 text-center space-y-8">
+            <h3 className="text-3xl font-black text-white uppercase tracking-tighter">Identificação</h3>
             <div className="space-y-4">
               <input type="text" placeholder="Nome Completo" className="w-full bg-black border border-white/5 rounded-2xl px-6 py-5 text-white font-bold outline-none focus:ring-1 focus:ring-red-600/30" value={clientForm.nome} onChange={e => setClientForm({...clientForm, nome: e.target.value})} />
               <input type="text" placeholder="WhatsApp (DDD)" className="w-full bg-black border border-white/5 rounded-2xl px-6 py-5 text-white font-bold outline-none focus:ring-1 focus:ring-red-600/30" value={clientForm.whatsapp} onChange={e => setClientForm({...clientForm, whatsapp: e.target.value})} />
               <input type="email" placeholder="Seu E-mail" className="w-full bg-black border border-white/5 rounded-2xl px-6 py-5 text-white font-bold outline-none focus:ring-1 focus:ring-red-600/30" value={clientForm.email} onChange={e => setClientForm({...clientForm, email: e.target.value})} />
             </div>
-            <Button variant="primary" className="w-full py-6 rounded-2xl font-black uppercase text-xs" isLoading={identifying} onClick={handleIdentification}>
-              {identModalReason === 'access' ? 'Entrar e Ver Fotos' : 'Começar Seleção'}
-            </Button>
-            <button className="text-slate-700 text-[9px] font-black uppercase tracking-widest hover:text-white transition-colors" onClick={() => setShowIdentModal(false)}>Voltar para a Galeria</button>
+            <Button variant="primary" className="w-full py-6 rounded-2xl font-black uppercase text-xs" isLoading={identifying} onClick={handleIdentification}>Entrar na Galeria</Button>
+            <button className="text-slate-700 text-[9px] font-black uppercase tracking-widest" onClick={() => setShowIdentModal(false)}>Voltar</button>
           </div>
         </div>
       )}
 
-      {/* MODAL SEM SELEÇÃO ENCONTRADA */}
-      {noSelectionAlert && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center p-6 bg-black/95 backdrop-blur-2xl animate-in zoom-in-95">
-           <div className="bg-[#0a0a0a] border border-white/10 w-full max-w-sm rounded-[3rem] p-12 text-center space-y-6">
-              <div className="w-16 h-16 bg-red-600/10 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-600/20">{ICONS.Photo}</div>
-              <h4 className="text-xl font-black text-white uppercase tracking-tight">Nada encontrado</h4>
-              <p className="text-slate-600 text-[10px] font-black uppercase tracking-widest leading-relaxed">
-                 Ainda não identificamos uma seleção de fotos salva para os seus dados. Deseja começar agora?
-              </p>
-              <Button variant="primary" className="w-full py-5 rounded-2xl font-black uppercase text-[10px] tracking-widest" onClick={() => setNoSelectionAlert(false)}>Começar Agora</Button>
-           </div>
-        </div>
-      )}
-
-      {/* MODAL VISUALIZAÇÃO AMPLIADA COM NOME DO ARQUIVO */}
+      {/* MODAL VISUALIZAÇÃO AMPLIADA */}
       {viewingPhoto && (
-        <div className="fixed inset-0 z-[110] bg-black/99 backdrop-blur-3xl flex flex-col items-center justify-center p-4 animate-in fade-in duration-300">
-          <header className="absolute top-0 left-0 right-0 p-6 md:p-10 flex justify-between items-center bg-gradient-to-b from-black/80 to-transparent">
+        <div className="fixed inset-0 z-[1200] bg-black/99 backdrop-blur-3xl flex flex-col items-center justify-center p-4 md:p-10 animate-in fade-in duration-300">
+          <header className="absolute top-0 left-0 right-0 p-6 md:p-10 flex justify-between items-center z-[1300] bg-gradient-to-b from-black/80 to-transparent">
              <div className="flex flex-col">
-                <span className="text-red-600 text-[8px] font-black uppercase tracking-[0.3em]">Arquivo Original</span>
+                <span className="text-red-600 text-[8px] font-black uppercase tracking-[0.3em]">Visualização Protegida</span>
                 <span className="text-white text-sm md:text-xl font-black uppercase tracking-tighter">{viewingPhoto.filename}</span>
              </div>
-             <button className="w-12 h-12 md:w-16 md:h-16 bg-white/5 text-white/40 rounded-2xl flex items-center justify-center hover:bg-white/10 transition-all" onClick={() => setViewingPhoto(null)}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+             <button 
+               className="w-12 h-12 md:w-16 md:h-16 bg-white/5 text-white rounded-2xl flex items-center justify-center hover:bg-red-600 transition-all cursor-pointer pointer-events-auto" 
+               onClick={(e) => {
+                 e.preventDefault();
+                 e.stopPropagation();
+                 setViewingPhoto(null);
+               }}
+             >
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
              </button>
           </header>
 
-          <div className="relative max-h-[70vh] md:max-h-[80vh] w-full flex justify-center group">
+          <div className="relative max-h-[70vh] md:max-h-[80vh] w-full flex justify-center group z-[1250]">
             <img src={`${R2_CONFIG.publicUrl}/${viewingPhoto.r2_key_original}`} className="max-h-[70vh] md:max-h-[80vh] object-contain pointer-events-none rounded-2xl border border-white/5 shadow-2xl" />
-            <div className="absolute inset-0 flex items-center justify-center opacity-10 p-20 rotate-[-15deg] pointer-events-none grayscale">
-              {photographer?.marca_dagua_url ? <img src={photographer.marca_dagua_url} className="w-full h-full object-contain" /> : <span className="text-white font-black text-6xl uppercase tracking-[1em]">PROTEGIDO</span>}
+            <div className="absolute inset-0 flex items-center justify-center opacity-40 p-10 md:p-20 rotate-[-15deg] pointer-events-none grayscale">
+              {photographer?.marca_dagua_url ? <img src={photographer.marca_dagua_url} className="w-full h-full object-contain" /> : <span className="text-white font-black text-6xl uppercase tracking-[1em]">REYEL PRODUÇÕES</span>}
             </div>
           </div>
 
-          <div className="mt-12 flex gap-4">
+          <div className="mt-8 md:mt-12 flex gap-4 z-[1300]">
              <Button 
                variant={selectedPhotos.has(viewingPhoto.id) ? 'primary' : 'premium'} 
-               className="px-16 py-6 rounded-2xl font-black uppercase text-[10px] tracking-[0.2em]"
-               onClick={() => {
-                 if(!client) {
-                   setIdentModalReason('start');
-                   return setShowIdentModal(true);
-                 }
+               className="px-10 md:px-16 py-5 md:py-6 rounded-2xl font-black uppercase text-[10px] tracking-[0.2em] pointer-events-auto"
+               onClick={(e) => {
+                 e.stopPropagation();
+                 if(!client) return setShowIdentModal(true);
                  const n = new Set(selectedPhotos);
                  if(n.has(viewingPhoto.id)) n.delete(viewingPhoto.id);
                  else {
@@ -472,10 +454,9 @@ const PublicGallery: React.FC = () => {
 
       <style>{`
         @media print {
-          body { filter: blur(100px) !important; pointer-events: none !important; }
-          img, section, header, main { display: none !important; }
+          html, body { display: none !important; }
         }
-        ::selection { background: #ff0000; color: white; }
+        ::selection { background: transparent; color: transparent; }
       `}</style>
     </div>
   );

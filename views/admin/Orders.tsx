@@ -180,14 +180,19 @@ const Orders: React.FC = () => {
                        </div>
                     </div>
                     
-                    <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-8 gap-4">
+                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">
                       {order.photos.map((photo: any) => (
-                        <div key={photo.id} className="aspect-square rounded-xl overflow-hidden border border-white/5 bg-[#0a0a0a]">
-                          <img 
-                            src={`${R2_CONFIG.publicUrl}/${photo.r2_key_thumbnail}`} 
-                            className="w-full h-full object-cover" 
-                            loading="lazy"
-                          />
+                        <div key={photo.id} className="flex flex-col gap-2">
+                          <div className="aspect-[3/4] rounded-2xl overflow-hidden border border-white/5 bg-[#0a0a0a] shadow-lg">
+                            <img 
+                              src={`${R2_CONFIG.publicUrl}/${photo.r2_key_thumbnail}`} 
+                              className="w-full h-full object-cover" 
+                              loading="lazy"
+                            />
+                          </div>
+                          <div className="bg-white/5 rounded-lg py-2 px-3 text-center border border-white/5">
+                            <p className="text-[10px] font-black text-white/70 uppercase tracking-tighter truncate">{photo.filename}</p>
+                          </div>
                         </div>
                       ))}
                     </div>
