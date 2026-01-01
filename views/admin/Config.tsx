@@ -23,9 +23,9 @@ const Config: React.FC = () => {
   const fetchProfile = async () => {
     setLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        let { data } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        let { data } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
         setProfile(data);
         if (data?.default_price_per_photo) setDefaultPrice(data.default_price_per_photo.toString());
         if (data?.pix_key) setPixKey(data.pix_key);
@@ -54,11 +54,17 @@ const Config: React.FC = () => {
     if (!file || !profile) return;
     try {
       setSaving(true);
-      const { url } = await uploadPhotoToR2(file, `profile-assets/${profile.id}`, () => {});
+      const fileName = `${type}-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
+      const path = `brand/${profile.id}/${fileName}`;
+      
+      const { url } = await uploadPhotoToR2(file, path);
       const updates = type === 'logo' ? { logo_url: url } : { marca_dagua_url: url };
       await supabase.from('profiles').update(updates).eq('id', profile.id);
       setProfile({ ...profile, ...updates });
       alert("Upload concluído!");
+    } catch (err: any) {
+      console.error("Erro upload asset:", err);
+      alert("Erro ao subir arquivo.");
     } finally {
       setSaving(false);
       if (e.target) e.target.value = '';
@@ -79,7 +85,6 @@ const Config: React.FC = () => {
           <h3 className="text-xl font-black text-white uppercase tracking-tight">Identidade Visual</h3>
           
           <div className="space-y-10">
-            {/* LOGO */}
             <div className="flex items-center gap-8 group">
               <div className="w-24 h-24 bg-black rounded-3xl border border-white/5 flex items-center justify-center overflow-hidden relative">
                 {profile?.logo_url ? <img src={profile.logo_url} className="w-full h-full object-contain p-4" /> : <span className="text-slate-800 font-black">LOGO</span>}
@@ -94,7 +99,6 @@ const Config: React.FC = () => {
               </div>
             </div>
 
-            {/* MARCA D'AGUA */}
             <div className="flex items-center gap-8 group">
               <div className="w-24 h-24 bg-black rounded-3xl border border-white/5 flex items-center justify-center overflow-hidden relative">
                 {profile?.marca_dagua_url ? <img src={profile.marca_dagua_url} className="w-full h-full object-contain p-4 opacity-50" /> : <span className="text-slate-800 font-black">MARK</span>}

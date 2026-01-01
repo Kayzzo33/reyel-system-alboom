@@ -88,13 +88,19 @@ const Albums: React.FC<{ initialOpenModal?: boolean; onModalClose?: () => void }
     if (!file) return;
     try {
       setUploadingCapa(true);
-      const fileName = `capa-${Date.now()}-${file.name.replace(/\s+/g, '_')}`;
-      const { url } = await uploadPhotoToR2(file, `assets/${fileName}`, () => {});
+      // Caminho limpo para evitar erros de assinatura do S3/R2
+      const fileName = `capa-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
+      const path = `covers/${fileName}`;
+      
+      const { url } = await uploadPhotoToR2(file, path);
       setNewAlbum(prev => ({ ...prev, capa_url: url }));
-    } catch (err) { 
-      console.error("Erro upload capa:", err);
-      alert("Erro ao subir capa"); 
-    } finally { setUploadingCapa(false); }
+    } catch (err: any) { 
+      console.error("Erro upload capa detalhado:", err);
+      alert("Falha ao subir imagem. Tente uma imagem menor ou verifique sua conexão."); 
+    } finally { 
+      setUploadingCapa(false); 
+      if (e.target) e.target.value = '';
+    }
   };
 
   const handleSaveAlbum = async () => {
@@ -125,6 +131,7 @@ const Albums: React.FC<{ initialOpenModal?: boolean; onModalClose?: () => void }
         if (error) throw error;
         setSelectedAlbum(prev => prev ? ({ ...prev, ...payload }) : null);
         setIsModalOpen(false);
+        fetchAlbums();
       } else {
         const { data, error } = await supabase.from('albums').insert([{
           ...payload,
@@ -218,7 +225,6 @@ const Albums: React.FC<{ initialOpenModal?: boolean; onModalClose?: () => void }
     } catch (err: any) { alert("Erro ao excluir: " + err.message); }
   };
 
-  // Renderização condicional do conteúdo principal
   const renderMainContent = () => {
     if (selectedAlbum) {
       return (
@@ -305,14 +311,10 @@ const Albums: React.FC<{ initialOpenModal?: boolean; onModalClose?: () => void }
 
   return (
     <>
-      {/* Conteúdo Principal */}
       {renderMainContent()}
-
-      {/* Inputs de Arquivo Globais */}
       <input type="file" multiple hidden ref={fileInputRef} onChange={handleFileSelect} accept="image/*" />
       <input type="file" hidden ref={capaInputRef} onChange={handleCapaUpload} accept="image/*" />
 
-      {/* Modal Global (acessível de qualquer lugar) */}
       {isModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/95 backdrop-blur-xl animate-in fade-in duration-300">
           <div className="bg-[#0a0a0a] border border-white/5 w-full max-w-3xl rounded-[3rem] p-12 shadow-3xl relative overflow-y-auto max-h-[90vh]">
