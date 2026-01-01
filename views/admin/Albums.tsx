@@ -41,30 +41,46 @@ const Albums: React.FC<{ initialOpenModal?: boolean; onModalClose?: () => void }
     fetchAlbums();
     fetchProfile();
     if (initialOpenModal) {
-      setStep(1);
-      setIsEditing(false);
-      setIsModalOpen(true);
+      handleOpenCreateModal();
       if (onModalClose) onModalClose();
     }
   }, [initialOpenModal]);
 
   const fetchProfile = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      const { data } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user) {
+      const { data } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
       setProfile(data);
-      if (data?.default_price_per_photo) setNewAlbum(prev => ({ ...prev, preco_por_foto: data.default_price_per_photo }));
     }
   };
 
   const fetchAlbums = async () => {
     try {
       setLoading(true);
-      const { data } = await supabase.from('albums').select('*, photos(count)').order('created_at', { ascending: false });
+      const { data, error } = await supabase.from('albums').select('*, photos(count)').order('created_at', { ascending: false });
+      if (error) throw error;
       setAlbums(data || []);
+    } catch (e) {
+      console.error("Erro ao buscar álbuns:", e);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleOpenCreateModal = () => {
+    setNewAlbum({
+      nome: '',
+      nome_galeria: '',
+      descricao: '',
+      categoria: 'Event',
+      preco_por_foto: profile?.default_price_per_photo || 15,
+      max_selecoes: 50,
+      data_evento: new Date().toISOString().split('T')[0],
+      capa_url: ''
+    });
+    setIsEditing(false);
+    setStep(1);
+    setIsModalOpen(true);
   };
 
   const handleCapaUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -72,28 +88,32 @@ const Albums: React.FC<{ initialOpenModal?: boolean; onModalClose?: () => void }
     if (!file) return;
     try {
       setUploadingCapa(true);
-      const { url } = await uploadPhotoToR2(file, 'capas-albuns', () => {});
+      const fileName = `capa-${Date.now()}-${file.name.replace(/\s+/g, '_')}`;
+      const { url } = await uploadPhotoToR2(file, `assets/${fileName}`, () => {});
       setNewAlbum(prev => ({ ...prev, capa_url: url }));
-    } catch (err) { alert("Erro ao subir capa"); } finally { setUploadingCapa(false); }
+    } catch (err) { 
+      console.error("Erro upload capa:", err);
+      alert("Erro ao subir capa"); 
+    } finally { setUploadingCapa(false); }
   };
 
   const handleSaveAlbum = async () => {
-    if (!newAlbum.nome_galeria || !newAlbum.nome) return alert('Nome do álbum é obrigatório.');
+    if (!newAlbum.nome_galeria) return alert('O nome da galeria é obrigatório.');
     
     setSaving(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Usuário não autenticado");
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) throw new Error("Sessão expirada.");
 
       const payload = {
-        nome: newAlbum.nome,
+        nome: newAlbum.nome_galeria,
         nome_galeria: newAlbum.nome_galeria,
-        descricao: newAlbum.descricao,
-        categoria: newAlbum.categoria,
-        preco_por_foto: Number(newAlbum.preco_por_foto),
-        max_selecoes: Number(newAlbum.max_selecoes),
+        descricao: newAlbum.descricao || '',
+        categoria: newAlbum.categoria || 'Event',
+        preco_por_foto: Number(newAlbum.preco_por_foto) || 0,
+        max_selecoes: Number(newAlbum.max_selecoes) || 0,
         data_evento: newAlbum.data_evento,
-        capa_url: newAlbum.capa_url
+        capa_url: newAlbum.capa_url || ''
       };
       
       if (isEditing && selectedAlbum) {
@@ -103,14 +123,12 @@ const Albums: React.FC<{ initialOpenModal?: boolean; onModalClose?: () => void }
           .eq('id', selectedAlbum.id);
 
         if (error) throw error;
-        
-        // Atualiza UI local
-        setSelectedAlbum({ ...selectedAlbum, ...payload } as Album);
-        alert("Configurações atualizadas com sucesso!");
+        setSelectedAlbum(prev => prev ? ({ ...prev, ...payload }) : null);
+        setIsModalOpen(false);
       } else {
         const { data, error } = await supabase.from('albums').insert([{
           ...payload,
-          photographer_id: user.id,
+          photographer_id: session.user.id,
           share_token: Math.random().toString(36).substring(2, 10),
           ativo: true
         }]).select().single();
@@ -120,11 +138,10 @@ const Albums: React.FC<{ initialOpenModal?: boolean; onModalClose?: () => void }
         setStep(2);
       }
       
-      fetchAlbums();
-      if (isEditing) setIsModalOpen(false);
+      await fetchAlbums();
     } catch (err: any) { 
-      console.error("Erro ao salvar álbum:", err);
-      alert(`Erro: ${err.message || 'Erro desconhecido'}`); 
+      console.error("Erro ao salvar:", err);
+      alert(`Erro: ${err.message}`); 
     } finally {
       setSaving(false);
     }
@@ -138,9 +155,9 @@ const Albums: React.FC<{ initialOpenModal?: boolean; onModalClose?: () => void }
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       try {
-        setUploadStatus(`Processando ${i + 1}/${files.length}...`);
+        setUploadStatus(`Enviando ${i + 1}/${files.length}...`);
         const { originalKey, thumbKey } = await uploadPhotoWithThumbnail(file, albumId, (step) => {
-          setUploadStatus(`[${i + 1}/${files.length}] Enviando ${step}`);
+          setUploadStatus(`[${i + 1}/${files.length}] ${step}`);
         });
 
         await supabase.from('photos').insert([{
@@ -174,142 +191,166 @@ const Albums: React.FC<{ initialOpenModal?: boolean; onModalClose?: () => void }
 
   const openEditModal = () => {
     if (!selectedAlbum) return;
+    
     setNewAlbum({
-      nome: selectedAlbum.nome,
-      nome_galeria: selectedAlbum.nome_galeria,
+      nome: selectedAlbum.nome || '',
+      nome_galeria: selectedAlbum.nome_galeria || '',
       descricao: selectedAlbum.descricao || '',
-      categoria: selectedAlbum.categoria,
-      preco_por_foto: selectedAlbum.preco_por_foto,
-      max_selecoes: selectedAlbum.max_selecoes,
-      data_evento: selectedAlbum.data_evento,
+      categoria: selectedAlbum.categoria || 'Event',
+      preco_por_foto: selectedAlbum.preco_por_foto || 15,
+      max_selecoes: selectedAlbum.max_selecoes || 50,
+      data_evento: selectedAlbum.data_evento || new Date().toISOString().split('T')[0],
       capa_url: selectedAlbum.capa_url || ''
     });
+    
     setIsEditing(true);
     setStep(1);
     setIsModalOpen(true);
   };
 
   const handleDeleteAlbum = async (albumId: string) => {
-    if (!confirm("⚠️ Excluir este álbum permanentemente?")) return;
+    if (!confirm("⚠️ Atenção: Isso excluirá o álbum e TODAS as fotos. Continuar?")) return;
     try {
-      await supabase.from('albums').delete().eq('id', albumId);
+      const { error } = await supabase.from('albums').delete().eq('id', albumId);
+      if (error) throw error;
       setAlbums(prev => prev.filter(a => a.id !== albumId));
       setSelectedAlbum(null);
-    } catch (err) { alert("Erro ao excluir."); }
+    } catch (err: any) { alert("Erro ao excluir: " + err.message); }
   };
 
-  if (selectedAlbum) {
-    return (
-      <div className="space-y-8 animate-in fade-in duration-500 pb-20">
-        <header className="flex flex-col lg:flex-row lg:items-center gap-6">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" onClick={() => setSelectedAlbum(null)} className="p-3 rounded-2xl bg-[#0a0a0a] border border-white/5">{ICONS.Back}</Button>
-            <div>
-              <h2 className="text-3xl font-black text-white tracking-tighter uppercase">{selectedAlbum.nome_galeria}</h2>
-              <p className="text-slate-600 text-[10px] font-black uppercase tracking-widest">{albumPhotos.length} Fotos na galeria</p>
+  // Renderização condicional do conteúdo principal
+  const renderMainContent = () => {
+    if (selectedAlbum) {
+      return (
+        <div className="space-y-8 animate-in fade-in duration-500 pb-20">
+          <header className="flex flex-col lg:flex-row lg:items-center gap-6">
+            <div className="flex items-center gap-4">
+              <Button variant="ghost" onClick={() => setSelectedAlbum(null)} className="p-3 rounded-2xl bg-[#0a0a0a] border border-white/5">{ICONS.Back}</Button>
+              <div>
+                <h2 className="text-3xl font-black text-white tracking-tighter uppercase">{selectedAlbum.nome_galeria}</h2>
+                <p className="text-slate-600 text-[10px] font-black uppercase tracking-widest">{albumPhotos.length} Fotos na galeria</p>
+              </div>
             </div>
+            <div className="flex flex-wrap gap-3 lg:ml-auto">
+               <Button variant="ghost" className="rounded-xl text-[10px] font-black uppercase tracking-widest border border-white/10 text-white" onClick={openEditModal}>
+                 {ICONS.Config} <span className="ml-2">Configurações</span>
+               </Button>
+               <Button variant="ghost" className="rounded-xl text-[10px] font-black uppercase tracking-widest border border-white/10 text-white" onClick={() => fileInputRef.current?.click()}>
+                 {ICONS.Plus} <span className="ml-2">Add Fotos</span>
+               </Button>
+               <Button variant={isCopied ? "secondary" : "primary"} className="rounded-xl px-6" onClick={() => {
+                  const url = `${window.location.origin}${window.location.pathname}?gallery=${selectedAlbum.share_token}`;
+                  navigator.clipboard.writeText(url).then(() => { setIsCopied(true); setTimeout(() => setIsCopied(false), 2000); });
+               }}>
+                 {isCopied ? ICONS.Check : ICONS.Share} <span className="ml-2">{isCopied ? "Copiado!" : "Link"}</span>
+               </Button>
+               <Button variant="ghost" className="rounded-xl text-red-600 hover:bg-red-600/10" onClick={() => handleDeleteAlbum(selectedAlbum.id)}>{ICONS.Delete}</Button>
+            </div>
+          </header>
+
+          {uploadStatus && (
+            <div className="bg-red-600/10 border border-red-600/20 p-6 rounded-2xl flex items-center gap-4 animate-pulse">
+              <div className="w-4 h-4 border-2 border-red-600 border-t-transparent rounded-full animate-spin"></div>
+              <span className="text-[10px] font-black uppercase text-red-600 tracking-widest">{uploadStatus}</span>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">
+            {loadingPhotos ? [1,2,3,4,5,6].map(i => <div key={i} className="aspect-square bg-[#0a0a0a] rounded-2xl animate-pulse border border-white/5"></div>) : albumPhotos.map(photo => (
+              <div key={photo.id} className="group relative aspect-square bg-[#0a0a0a] rounded-3xl overflow-hidden border border-white/5">
+                <img src={`${R2_CONFIG.publicUrl}/${photo.r2_key_thumbnail}`} className="w-full h-full object-cover" loading="lazy" />
+              </div>
+            ))}
+            {albumPhotos.length === 0 && !loadingPhotos && (
+              <div className="col-span-full py-20 text-center border-2 border-dashed border-white/5 rounded-[3rem]">
+                 <p className="text-slate-700 font-black uppercase text-[10px] tracking-widest">Nenhuma foto encontrada. Clique em "Add Fotos".</p>
+              </div>
+            )}
           </div>
-          <div className="flex flex-wrap gap-3 lg:ml-auto">
-             <Button variant="ghost" className="rounded-xl text-xs border border-white/10 text-white" onClick={openEditModal}>
-               {ICONS.Config} <span className="ml-2">Configurações</span>
-             </Button>
-             <Button variant="ghost" className="rounded-xl text-xs border border-white/10 text-white" onClick={() => fileInputRef.current?.click()}>
-               {ICONS.Plus} <span className="ml-2">Add Fotos</span>
-             </Button>
-             <input type="file" multiple hidden ref={fileInputRef} onChange={handleFileSelect} accept="image/*" />
-             <Button variant={isCopied ? "secondary" : "primary"} className="rounded-xl px-6" onClick={() => {
-                const url = `${window.location.origin}${window.location.pathname}?gallery=${selectedAlbum.share_token}`;
-                navigator.clipboard.writeText(url).then(() => { setIsCopied(true); setTimeout(() => setIsCopied(false), 2000); });
-             }}>
-               {isCopied ? ICONS.Check : ICONS.Share} <span className="ml-2">{isCopied ? "Copiado!" : "Link"}</span>
-             </Button>
-             <Button variant="ghost" className="rounded-xl text-red-600 hover:bg-red-600/10" onClick={() => handleDeleteAlbum(selectedAlbum.id)}>{ICONS.Delete}</Button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-8 animate-in fade-in duration-500">
+        <header className="flex justify-between items-center">
+          <div>
+            <h2 className="text-3xl font-black text-white tracking-tighter uppercase">Meus Álbuns</h2>
+            <p className="text-slate-600 font-medium text-sm">Gerencie suas entregas profissionais.</p>
           </div>
+          <Button variant="primary" className="rounded-2xl px-8 py-4 font-black text-xs uppercase shadow-2xl" onClick={handleOpenCreateModal}>
+            {ICONS.Plus} Criar Galeria
+          </Button>
         </header>
 
-        {uploadStatus && (
-          <div className="bg-red-600/10 border border-red-600/20 p-6 rounded-2xl flex items-center gap-4">
-            <div className="w-4 h-4 border-2 border-red-600 border-t-transparent rounded-full animate-spin"></div>
-            <span className="text-[10px] font-black uppercase text-red-600">{uploadStatus}</span>
-          </div>
-        )}
-
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">
-          {loadingPhotos ? [1,2,3,4,5,6].map(i => <div key={i} className="aspect-square bg-[#0a0a0a] rounded-2xl animate-pulse"></div>) : albumPhotos.map(photo => (
-            <div key={photo.id} className="group relative aspect-square bg-[#0a0a0a] rounded-3xl overflow-hidden border border-white/5">
-              <img src={`${R2_CONFIG.publicUrl}/${photo.r2_key_thumbnail}`} className="w-full h-full object-cover" />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          {loading ? [1,2,3].map(i => <div key={i} className="aspect-video bg-[#0a0a0a] rounded-[2.5rem] animate-pulse border border-white/5"></div>) : albums.map((album) => (
+            <div key={album.id} className="bg-[#0a0a0a] border border-white/5 rounded-[2.5rem] overflow-hidden group hover:border-red-600/30 transition-all shadow-3xl">
+               <div className="aspect-video relative overflow-hidden bg-black/50">
+                  {album.capa_url ? <img src={album.capa_url} className="w-full h-full object-cover opacity-60 group-hover:scale-110 transition-transform duration-700" /> : <div className="w-full h-full flex items-center justify-center text-slate-800 font-black text-[10px] uppercase tracking-widest">SEM CAPA</div>}
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] to-transparent"></div>
+                  <div className="absolute bottom-6 left-8 pr-4">
+                     <h3 className="text-xl font-black text-white uppercase tracking-tighter truncate">{album.nome_galeria}</h3>
+                  </div>
+               </div>
+               <div className="p-8">
+                  <Button variant="ghost" className="w-full rounded-2xl text-[10px] font-black uppercase tracking-widest border border-white/5" onClick={() => handleManageAlbum(album)}>Gerenciar Galeria</Button>
+               </div>
             </div>
           ))}
         </div>
       </div>
     );
-  }
+  };
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      <header className="flex justify-between items-center">
-        <div>
-          <h2 className="text-3xl font-black text-white tracking-tighter uppercase">Meus Álbuns</h2>
-          <p className="text-slate-600 font-medium text-sm">Gerencie suas entregas profissionais.</p>
-        </div>
-        <Button variant="primary" className="rounded-2xl px-8 py-4 font-black text-xs uppercase shadow-2xl" onClick={() => { setStep(1); setIsEditing(false); setIsModalOpen(true); }}>
-          {ICONS.Plus} Criar Galeria
-        </Button>
-      </header>
+    <>
+      {/* Conteúdo Principal */}
+      {renderMainContent()}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-        {albums.map((album) => (
-          <div key={album.id} className="bg-[#0a0a0a] border border-white/5 rounded-[2.5rem] overflow-hidden group hover:border-red-600/30 transition-all shadow-3xl">
-             <div className="aspect-video relative overflow-hidden bg-black/50">
-                {album.capa_url ? <img src={album.capa_url} className="w-full h-full object-cover opacity-60 group-hover:scale-110 transition-transform duration-700" /> : <div className="w-full h-full flex items-center justify-center text-slate-800 font-black">SEM CAPA</div>}
-                <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] to-transparent"></div>
-                <div className="absolute bottom-6 left-8">
-                   <h3 className="text-xl font-black text-white uppercase tracking-tighter">{album.nome_galeria}</h3>
-                </div>
-             </div>
-             <div className="p-8">
-                <Button variant="ghost" className="w-full rounded-2xl text-[10px] font-black uppercase tracking-widest border border-white/5" onClick={() => handleManageAlbum(album)}>Gerenciar</Button>
-             </div>
-          </div>
-        ))}
-      </div>
+      {/* Inputs de Arquivo Globais */}
+      <input type="file" multiple hidden ref={fileInputRef} onChange={handleFileSelect} accept="image/*" />
+      <input type="file" hidden ref={capaInputRef} onChange={handleCapaUpload} accept="image/*" />
 
+      {/* Modal Global (acessível de qualquer lugar) */}
       {isModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/95 backdrop-blur-xl animate-in fade-in duration-300">
           <div className="bg-[#0a0a0a] border border-white/5 w-full max-w-3xl rounded-[3rem] p-12 shadow-3xl relative overflow-y-auto max-h-[90vh]">
-             <button onClick={() => setIsModalOpen(false)} className="absolute top-10 right-10 text-slate-500 hover:text-white">{ICONS.Back}</button>
+             <button onClick={() => setIsModalOpen(false)} className="absolute top-10 right-10 text-slate-500 hover:text-white transition-colors">{ICONS.Back}</button>
              
              {step === 1 ? (
                <div className="space-y-10">
                  <div>
-                   <h3 className="text-3xl font-black text-white uppercase tracking-tighter">{isEditing ? 'Editar Configurações' : 'Configurar Galeria'}</h3>
-                   <p className="text-slate-600 text-xs font-bold mt-2 uppercase tracking-widest">Defina como o cliente verá o trabalho.</p>
+                   <h3 className="text-3xl font-black text-white uppercase tracking-tighter">{isEditing ? 'Configurações do Álbum' : 'Criar Novo Álbum'}</h3>
+                   <p className="text-slate-600 text-xs font-bold mt-2 uppercase tracking-widest">Ajuste os detalhes e a aparência da galeria.</p>
                  </div>
                  
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                    <div className="space-y-6">
                       <div className="space-y-2">
-                        <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Foto de Capa (Obrigatório p/ Estética)</label>
+                        <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Imagem de Capa (Destaque)</label>
                         <div 
-                          className="aspect-video bg-black rounded-3xl border border-white/5 flex flex-col items-center justify-center cursor-pointer overflow-hidden relative group"
+                          className="aspect-video bg-black rounded-3xl border border-white/5 flex flex-col items-center justify-center cursor-pointer overflow-hidden relative group hover:border-red-600/30 transition-colors"
                           onClick={() => capaInputRef.current?.click()}
                         >
                           {newAlbum.capa_url ? <img src={newAlbum.capa_url} className="w-full h-full object-cover" /> : (
                              <div className="flex flex-col items-center gap-2 text-slate-700 group-hover:text-red-600 transition-colors">
-                                {ICONS.Photo}
-                                <span className="text-[9px] font-black uppercase tracking-widest">Subir Capa</span>
+                                <div className="p-3 bg-white/5 rounded-2xl">{ICONS.Photo}</div>
+                                <span className="text-[9px] font-black uppercase tracking-widest">Upload Capa</span>
                              </div>
                           )}
-                          {uploadingCapa && <div className="absolute inset-0 bg-black/60 flex items-center justify-center"><div className="w-6 h-6 border-2 border-red-600 border-t-transparent rounded-full animate-spin"></div></div>}
+                          {uploadingCapa && <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center gap-3">
+                             <div className="w-6 h-6 border-2 border-red-600 border-t-transparent rounded-full animate-spin"></div>
+                             <span className="text-[8px] font-black text-red-600 uppercase tracking-widest">Subindo...</span>
+                          </div>}
                         </div>
-                        <input type="file" hidden ref={capaInputRef} onChange={handleCapaUpload} accept="image/*" />
                       </div>
                       
                       <div className="space-y-2">
-                        <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Descrição Curta</label>
+                        <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Descrição / Convite</label>
                         <textarea 
-                          placeholder="Ex: Uma tarde mágica no parque com a família..." 
-                          className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 text-white font-bold text-sm outline-none focus:ring-1 focus:ring-red-600/40 h-28" 
+                          placeholder="Uma mensagem de boas-vindas para o seu cliente..." 
+                          className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 text-white font-bold text-sm outline-none focus:ring-1 focus:ring-red-600/40 h-28 resize-none" 
                           value={newAlbum.descricao} 
                           onChange={e => setNewAlbum({...newAlbum, descricao: e.target.value})}
                         />
@@ -318,46 +359,46 @@ const Albums: React.FC<{ initialOpenModal?: boolean; onModalClose?: () => void }
 
                    <div className="space-y-6">
                       <div className="space-y-2">
-                        <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Nome da Galeria</label>
-                        <input type="text" placeholder="Ex: Batizado do Theo" className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 text-white font-bold outline-none focus:ring-1 focus:ring-red-600/40" value={newAlbum.nome_galeria} onChange={e => setNewAlbum({...newAlbum, nome_galeria: e.target.value, nome: e.target.value})} />
+                        <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Título da Galeria (Cliente vê isso)</label>
+                        <input type="text" placeholder="Ex: Casamento de Maria & João" className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 text-white font-bold outline-none focus:ring-1 focus:ring-red-600/40" value={newAlbum.nome_galeria} onChange={e => setNewAlbum({...newAlbum, nome_galeria: e.target.value, nome: e.target.value})} />
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                          <div className="space-y-2">
-                           <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Preço/Foto</label>
+                           <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Preço Extra (R$)</label>
                            <input type="number" className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 text-white font-bold outline-none focus:ring-1 focus:ring-red-600/40" value={newAlbum.preco_por_foto} onChange={e => setNewAlbum({...newAlbum, preco_por_foto: parseFloat(e.target.value)})} />
                          </div>
                          <div className="space-y-2">
-                           <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Qtd Fotos</label>
+                           <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Limite Seleção</label>
                            <input type="number" className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 text-white font-bold outline-none focus:ring-1 focus:ring-red-600/40" value={newAlbum.max_selecoes} onChange={e => setNewAlbum({...newAlbum, max_selecoes: parseInt(e.target.value)})} />
                          </div>
                       </div>
                       <div className="space-y-2">
-                        <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Data do Evento</label>
+                        <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest ml-1">Data da Entrega</label>
                         <input type="date" className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 text-white font-bold outline-none focus:ring-1 focus:ring-red-600/40" value={newAlbum.data_evento} onChange={e => setNewAlbum({...newAlbum, data_evento: e.target.value})} />
                       </div>
                    </div>
                  </div>
                  
                  <Button variant="primary" className="w-full py-6 rounded-3xl font-black uppercase text-xs shadow-2xl shadow-red-900/40" onClick={handleSaveAlbum} isLoading={saving}>
-                    {isEditing ? 'Salvar Alterações' : 'Salvar e Ir para Fotos'}
+                    {isEditing ? 'Salvar Alterações' : 'Criar Álbum e Continuar'}
                  </Button>
                </div>
              ) : (
                <div className="text-center py-20 space-y-10">
                  <div className="w-24 h-24 bg-red-600/10 rounded-full flex items-center justify-center mx-auto text-red-600 border border-red-600/20">{ICONS.Photo}</div>
                  <div>
-                   <h3 className="text-3xl font-black text-white uppercase tracking-tighter">Hora do Upload</h3>
-                   <p className="text-slate-600 text-xs font-bold mt-2 uppercase tracking-widest">O álbum foi criado! Agora suba as fotos.</p>
+                   <h3 className="text-3xl font-black text-white uppercase tracking-tighter">Álbum Criado!</h3>
+                   <p className="text-slate-600 text-xs font-bold mt-2 uppercase tracking-widest">O ambiente está pronto. Agora selecione as fotos do seu computador.</p>
                  </div>
                  <Button variant="primary" className="w-full py-6 rounded-3xl font-black uppercase text-xs" onClick={() => fileInputRef.current?.click()} isLoading={!!uploadStatus}>
-                   {uploadStatus || 'Selecionar Arquivos'}
+                   {uploadStatus || 'Escolher Fotos'}
                  </Button>
                </div>
              )}
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 };
 
