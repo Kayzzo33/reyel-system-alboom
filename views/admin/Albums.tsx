@@ -19,6 +19,7 @@ const Albums: React.FC<{ initialOpenModal?: boolean; onModalClose?: () => void }
   const [loadingPhotos, setLoadingPhotos] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
   const [isCopied, setIsCopied] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const [newAlbum, setNewAlbum] = useState({
     nome: '',
@@ -78,34 +79,54 @@ const Albums: React.FC<{ initialOpenModal?: boolean; onModalClose?: () => void }
 
   const handleSaveAlbum = async () => {
     if (!newAlbum.nome_galeria || !newAlbum.nome) return alert('Nome do álbum é obrigatório.');
+    
+    setSaving(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Usuário não autenticado");
+
+      const payload = {
+        nome: newAlbum.nome,
+        nome_galeria: newAlbum.nome_galeria,
+        descricao: newAlbum.descricao,
+        categoria: newAlbum.categoria,
+        preco_por_foto: Number(newAlbum.preco_por_foto),
+        max_selecoes: Number(newAlbum.max_selecoes),
+        data_evento: newAlbum.data_evento,
+        capa_url: newAlbum.capa_url
+      };
       
       if (isEditing && selectedAlbum) {
-        const { error } = await supabase.from('albums').update({
-          ...newAlbum
-        }).eq('id', selectedAlbum.id);
+        const { error } = await supabase
+          .from('albums')
+          .update(payload)
+          .eq('id', selectedAlbum.id);
+
         if (error) throw error;
-        alert("Álbum atualizado com sucesso!");
-        setIsModalOpen(false);
-        const updated = { ...selectedAlbum, ...newAlbum };
-        setSelectedAlbum(updated as Album);
-        fetchAlbums();
+        
+        // Atualiza UI local
+        setSelectedAlbum({ ...selectedAlbum, ...payload } as Album);
+        alert("Configurações atualizadas com sucesso!");
       } else {
         const { data, error } = await supabase.from('albums').insert([{
-          ...newAlbum,
-          photographer_id: user?.id,
+          ...payload,
+          photographer_id: user.id,
           share_token: Math.random().toString(36).substring(2, 10),
           ativo: true
         }]).select().single();
+
         if (error) throw error;
         setCreatedAlbumId(data.id);
         setStep(2);
-        fetchAlbums();
       }
-    } catch (err) { 
-      console.error(err);
-      alert('Erro ao salvar álbum.'); 
+      
+      fetchAlbums();
+      if (isEditing) setIsModalOpen(false);
+    } catch (err: any) { 
+      console.error("Erro ao salvar álbum:", err);
+      alert(`Erro: ${err.message || 'Erro desconhecido'}`); 
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -317,7 +338,7 @@ const Albums: React.FC<{ initialOpenModal?: boolean; onModalClose?: () => void }
                    </div>
                  </div>
                  
-                 <Button variant="primary" className="w-full py-6 rounded-3xl font-black uppercase text-xs shadow-2xl shadow-red-900/40" onClick={handleSaveAlbum}>
+                 <Button variant="primary" className="w-full py-6 rounded-3xl font-black uppercase text-xs shadow-2xl shadow-red-900/40" onClick={handleSaveAlbum} isLoading={saving}>
                     {isEditing ? 'Salvar Alterações' : 'Salvar e Ir para Fotos'}
                  </Button>
                </div>

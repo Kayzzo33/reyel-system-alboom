@@ -46,34 +46,33 @@ const PublicGallery: React.FC = () => {
   useEffect(() => {
     if (shareToken) fetchAlbum();
     
-    // BLOQUEIOS NATIVOS
     const block = (e: any) => e.preventDefault();
     document.addEventListener('contextmenu', block);
     document.addEventListener('dragstart', block);
     
-    // SISTEMA ANTI-PRINT ULTRA RÁPIDO (MODO CAPTURA)
+    // SISTEMA ANTI-PRINT "ZERO DELAY"
+    const triggerProtection = () => setIsProtected(true);
+    const releaseProtection = () => setTimeout(() => setIsProtected(false), 1000);
+
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Bloqueio Imediato: Shift, Win (Meta), Ctrl, Alt ou PrintScreen
+      // Bloqueio ultra-rápido: Shift, Control, Alt, Meta (Windows/Cmd), PrintScreen
       if (e.shiftKey || e.ctrlKey || e.altKey || e.metaKey || e.key === 'PrintScreen') {
         setIsProtected(true);
       }
     };
 
     const handleKeyUp = () => {
-      // Mantém o bloqueio por um breve momento para limpar o buffer do SO
-      setTimeout(() => setIsProtected(false), 1200);
+      // Pequeno respiro antes de tirar o blur
+      setTimeout(() => setIsProtected(false), 800);
     };
 
-    // Usar 'true' no final habilita o modo CAPTURE (executa antes de tudo)
+    // Usar a fase de CAPTURA (true) faz o evento disparar ANTES de qualquer outro script
     window.addEventListener('keydown', handleKeyDown, true);
     window.addEventListener('keyup', handleKeyUp, true);
     
-    // Proteção por perda de foco (Troca de aba ou Alt+Tab)
-    const triggerProtection = () => setIsProtected(true);
-    const releaseProtection = () => setTimeout(() => setIsProtected(false), 500);
-
     window.addEventListener('blur', triggerProtection);
     window.addEventListener('focus', releaseProtection);
+    
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden') triggerProtection();
       else releaseProtection();
@@ -229,10 +228,10 @@ const PublicGallery: React.FC = () => {
   return (
     <div className={`min-h-screen bg-[#000000] select-none`}>
       
-      {/* OVERLAY DE PROTEÇÃO (SÓ APARECE QUANDO ISPROTECTED) */}
+      {/* OVERLAY DE PROTEÇÃO SEM TRANSIÇÃO PARA MÁXIMA VELOCIDADE */}
       {isProtected && (
-        <div className="fixed inset-0 z-[200] bg-black/50 backdrop-blur-[80px] flex items-center justify-center pointer-events-none transition-all duration-75">
-          <div className="text-white font-black text-xs uppercase tracking-[0.5em] opacity-40">Reyel Produções - Protegido</div>
+        <div className="fixed inset-0 z-[500] bg-black/70 backdrop-blur-[100px] flex items-center justify-center pointer-events-none">
+          <div className="text-white font-black text-[10px] uppercase tracking-[1em] opacity-40">Reyel Produções - Protegido</div>
         </div>
       )}
 
