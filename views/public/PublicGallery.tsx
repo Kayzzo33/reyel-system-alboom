@@ -18,7 +18,11 @@ const useClientSession = (albumId: string) => {
     localStorage.setItem(key, JSON.stringify(clientData));
     setClient(clientData);
   };
-  return { client, saveSession };
+  const clearSession = () => {
+    localStorage.removeItem(key);
+    setClient(null);
+  };
+  return { client, saveSession, clearSession };
 };
 
 const PublicGallery: React.FC = () => {
@@ -32,17 +36,18 @@ const PublicGallery: React.FC = () => {
   const [isFinished, setIsFinished] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState('pendente');
   const [showIdentModal, setShowIdentModal] = useState(false);
+  const [identModalReason, setIdentModalReason] = useState<'start' | 'access'>('start');
   const [clientForm, setClientForm] = useState({ nome: '', email: '', whatsapp: '' });
   const [identifying, setIdentifying] = useState(false);
   const [downloading, setDownloading] = useState<string | null>(null);
   const [isProtected, setIsProtected] = useState(false); 
-  const [hasPreviousSelection, setHasPreviousSelection] = useState(false);
+  const [noSelectionAlert, setNoSelectionAlert] = useState(false);
 
   const photosRef = useRef<HTMLElement>(null);
   const queryParams = new URLSearchParams(window.location.search);
   const shareToken = queryParams.get('gallery') || window.location.pathname.split('/').pop() || '';
   
-  const { client, saveSession } = useClientSession(album?.id || 'session');
+  const { client, saveSession, clearSession } = useClientSession(album?.id || 'session');
 
   useEffect(() => {
     if (shareToken) fetchAlbum();
@@ -54,31 +59,12 @@ const PublicGallery: React.FC = () => {
     const triggerProtection = () => setIsProtected(true);
     const releaseProtection = () => setTimeout(() => setIsProtected(false), 1000);
 
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.shiftKey || e.ctrlKey || e.altKey || e.metaKey || e.key === 'PrintScreen') {
-        setIsProtected(true);
-      }
-    };
-
-    const handleKeyUp = () => {
-      setTimeout(() => setIsProtected(false), 800);
-    };
-
-    window.addEventListener('keydown', handleKeyDown, true);
-    window.addEventListener('keyup', handleKeyUp, true);
     window.addEventListener('blur', triggerProtection);
     window.addEventListener('focus', releaseProtection);
     
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') triggerProtection();
-      else releaseProtection();
-    });
-
     return () => {
       document.removeEventListener('contextmenu', block);
       document.removeEventListener('dragstart', block);
-      window.removeEventListener('keydown', handleKeyDown, true);
-      window.removeEventListener('keyup', handleKeyUp, true);
       window.removeEventListener('blur', triggerProtection);
       window.removeEventListener('focus', releaseProtection);
     };
@@ -90,7 +76,7 @@ const PublicGallery: React.FC = () => {
     }
   }, [album, client]);
 
-  const checkExistingSelection = async () => {
+  const checkExistingSelection = async (autoRedirect = false) => {
     if (!album || !client?.id) return;
     try {
       const { data: existingSels } = await supabase
@@ -102,9 +88,7 @@ const PublicGallery: React.FC = () => {
       if (existingSels && existingSels.length > 0) {
         const ids = new Set<string>(existingSels.map((s: any) => String(s.photo_id)));
         setSelectedPhotos(ids);
-        setHasPreviousSelection(true);
-        // Se já tinha seleção, marcar como finalizado para mostrar o resumo
-        setIsFinished(true);
+        if (autoRedirect) setIsFinished(true);
         
         const { data: pStat } = await supabase
           .from('order_status')
@@ -114,8 +98,12 @@ const PublicGallery: React.FC = () => {
           .maybeSingle();
           
         if (pStat) setPaymentStatus(pStat.status);
+        return true;
+      } else {
+        if (autoRedirect) setNoSelectionAlert(true);
+        return false;
       }
-    } catch (e) { console.error("Erro seleção:", e); }
+    } catch (e) { console.error("Erro seleção:", e); return false; }
   };
 
   const fetchAlbum = async () => {
@@ -161,13 +149,29 @@ const PublicGallery: React.FC = () => {
       if (existingClient) {
         saveSession(existingClient);
         setShowIdentModal(false);
+        // Se o motivo foi acessar, tentar redirecionar após o login
+        if (identModalReason === 'access') {
+          checkExistingSelection(true);
+        }
       }
     } catch (err) { console.error(err); } finally { setIdentifying(false); }
   };
 
+  const handleAccessMySelection = () => {
+    if (!client) {
+      setIdentModalReason('access');
+      setShowIdentModal(true);
+    } else {
+      checkExistingSelection(true);
+    }
+  };
+
   const handleFinishSelection = async () => {
-    if (!client) return setShowIdentModal(true);
-    if (selectedPhotos.size === 0) return alert("Selecione pelo menos uma foto.");
+    if (!client) {
+      setIdentModalReason('start');
+      return setShowIdentModal(true);
+    }
+    if (selectedPhotos.size === 0) return alert("Selecione pelo menos uma foto antes de confirmar.");
     try {
       setIsFinishing(true);
       await supabase.from('selections').delete().eq('album_id', album?.id).eq('client_id', client.id);
@@ -178,7 +182,6 @@ const PublicGallery: React.FC = () => {
       }));
       await supabase.from('selections').insert(payload);
       setIsFinished(true);
-      setHasPreviousSelection(true);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) { alert("Erro ao salvar."); } finally { setIsFinishing(false); }
   };
@@ -187,7 +190,7 @@ const PublicGallery: React.FC = () => {
     e.stopPropagation();
     e.preventDefault();
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    const fileName = `${(photo.filename || 'foto').replace(/\.[^/.]+$/, "")}.jpg`;
+    const fileName = photo.filename || 'foto_reyel.jpg';
 
     try {
       setDownloading(photo.id);
@@ -210,9 +213,12 @@ const PublicGallery: React.FC = () => {
       link.download = fileName;
       document.body.appendChild(link);
       link.click();
-      setTimeout(() => document.body.removeChild(link), 5000);
+      setTimeout(() => {
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(blobUrl);
+      }, 5000);
     } catch (err) { 
-      window.location.assign(`${R2_CONFIG.publicUrl}/${photo.r2_key_original}`);
+      window.open(`${R2_CONFIG.publicUrl}/${photo.r2_key_original}`, '_blank');
     } finally { setDownloading(null); }
   };
 
@@ -224,18 +230,18 @@ const PublicGallery: React.FC = () => {
   );
 
   return (
-    <div className={`min-h-screen bg-[#000000] select-none`}>
+    <div className="min-h-screen bg-[#000000] select-none overflow-x-hidden">
       
       {isProtected && (
         <div className="fixed inset-0 z-[500] bg-black/70 backdrop-blur-[100px] flex items-center justify-center pointer-events-none">
-          <div className="text-white font-black text-[10px] uppercase tracking-[1em] opacity-40">Reyel Produções - Protegido</div>
+          <div className="text-white font-black text-[10px] uppercase tracking-[1em] opacity-40 text-center px-6">Reyel Produções - Protegido</div>
         </div>
       )}
 
       {/* CAPA DO ÁLBUM */}
       {!isFinished && (
         <section className="h-screen w-full flex flex-col lg:flex-row bg-[#000000] relative overflow-hidden">
-           <div className="w-full lg:w-1/2 h-full flex flex-col items-center justify-center p-8 md:p-20 space-y-12 text-center lg:text-left">
+           <div className="w-full lg:w-1/2 h-full flex flex-col items-center justify-center p-8 md:p-20 space-y-12 text-center lg:text-left z-10">
               <div className="space-y-6">
                 <p className="text-red-600 font-black uppercase text-[10px] md:text-xs tracking-[0.4em]">Reyel Barros de Almeida</p>
                 <h1 className="text-4xl md:text-7xl font-black text-white tracking-tighter leading-none uppercase">{album?.nome_galeria}</h1>
@@ -244,8 +250,9 @@ const PublicGallery: React.FC = () => {
                    <p className="text-slate-700 text-[10px] font-black uppercase tracking-[0.2em]">{new Date(album?.data_evento || '').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
                 </div>
               </div>
-              <div>
-                <Button variant="premium" size="lg" className="px-16 py-6" onClick={scrollToPhotos}>Explorar Galeria</Button>
+              <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto">
+                <Button variant="primary" size="lg" className="px-12 py-6 rounded-2xl" onClick={scrollToPhotos}>Explorar Galeria</Button>
+                <Button variant="premium" size="lg" className="px-12 py-6 rounded-2xl" onClick={handleAccessMySelection}>Minhas Escolhas</Button>
               </div>
            </div>
            <div className="w-full lg:w-1/2 h-full relative group">
@@ -260,39 +267,36 @@ const PublicGallery: React.FC = () => {
         </section>
       )}
 
-      {/* HEADER FIXO COM BOTÕES CONDICIONAIS */}
+      {/* HEADER FIXO COM LOGO E CONTROLES */}
       {!isFinished && (
-        <header className="sticky top-0 z-50 bg-[#000000]/80 backdrop-blur-3xl border-b border-white/5 px-6 py-4 md:py-6 flex justify-between items-center">
+        <header className="sticky top-0 z-50 bg-[#000000]/80 backdrop-blur-3xl border-b border-white/5 px-4 md:px-10 py-4 flex justify-between items-center">
           <div className="flex items-center gap-4">
              <div className="w-10 h-10 md:w-12 md:h-12 bg-[#0a0a0a] rounded-xl border border-white/5 flex items-center justify-center overflow-hidden">
                {photographer?.logo_url ? <img src={photographer.logo_url} className="w-full h-full object-contain p-2" /> : <span className="text-red-600 font-black text-sm">R</span>}
              </div>
-             <div>
+             <div className="hidden sm:block">
                <h2 className="text-[10px] md:text-xs font-black text-white leading-none tracking-tighter uppercase">{album?.nome_galeria}</h2>
                <p className="text-[8px] md:text-[9px] text-slate-600 font-black mt-1 uppercase tracking-widest"><span className="text-red-600">{selectedPhotos.size}</span> / {album?.max_selecoes} FOTOS</p>
              </div>
           </div>
           
           <div className="flex items-center gap-2 md:gap-4">
-             {/* Botão de Ver Seleção Já Salva (Só aparece se ele já logou e o sistema detectou algo) */}
-             {hasPreviousSelection && (
-               <Button 
-                 variant="ghost" 
-                 size="sm" 
-                 className="hidden md:inline-flex border border-white/10"
-                 onClick={() => setIsFinished(true)}
-               >
-                 Acessar Minhas Escolhas
-               </Button>
-             )}
+             <Button 
+               variant="premium" 
+               size="sm" 
+               className="rounded-xl px-4 md:px-8 py-3 md:py-4 font-black uppercase text-[8px] md:text-[10px] tracking-widest"
+               onClick={handleAccessMySelection}
+             >
+               Ver Minhas Fotos
+             </Button>
 
              <Button 
                variant="primary" 
-               className="rounded-xl px-4 md:px-8 py-3 md:py-4 font-black uppercase text-[9px] md:text-[10px] tracking-widest" 
+               className="rounded-xl px-4 md:px-8 py-3 md:py-4 font-black uppercase text-[8px] md:text-[10px] tracking-widest" 
                isLoading={isFinishing} 
                onClick={handleFinishSelection}
              >
-               {client ? "Confirmar Seleção" : "Iniciar Seleção"}
+               {client ? "Confirmar Escolhas" : "Iniciar Seleção"}
              </Button>
           </div>
         </header>
@@ -300,13 +304,13 @@ const PublicGallery: React.FC = () => {
 
       {/* TELA DE RESUMO / FINALIZADO */}
       {isFinished && (
-        <main className="max-w-7xl mx-auto px-6 py-20 text-center space-y-16 animate-in fade-in duration-700">
+        <main className="max-w-7xl mx-auto px-6 py-12 md:py-20 text-center space-y-12 animate-in fade-in duration-700">
            <header className="flex flex-col items-center gap-6">
               <div className="w-20 h-20 bg-emerald-600/10 text-emerald-600 rounded-3xl flex items-center justify-center border border-emerald-600/20">{ICONS.Check}</div>
-              <h1 className="text-4xl md:text-6xl font-black text-white tracking-tighter uppercase">Minha Seleção</h1>
-              <p className="text-slate-500 font-bold max-w-md">Olá {client?.nome}, aqui estão as {selectedPhotos.size} fotos que você escolheu. Elas já estão salvas em nosso sistema!</p>
+              <h1 className="text-4xl md:text-6xl font-black text-white tracking-tighter uppercase">Seleção Salva</h1>
+              <p className="text-slate-500 font-bold max-w-md">Olá {client?.nome}, suas {selectedPhotos.size} fotos escolhidas estão seguras em nosso sistema.</p>
               <div className={`px-6 py-3 rounded-full border text-[9px] font-black uppercase tracking-widest ${paymentStatus === 'pago' ? 'bg-emerald-600/10 border-emerald-600/30 text-emerald-600' : 'bg-red-600/10 border-red-600/30 text-red-600'}`}>
-                 {paymentStatus === 'pago' ? '✓ Downloads Liberados' : 'Aguardando Aprovação / Pagamento'}
+                 {paymentStatus === 'pago' ? '✓ Downloads Liberados' : 'Aguardando Pagamento / Liberação'}
               </div>
            </header>
 
@@ -314,8 +318,11 @@ const PublicGallery: React.FC = () => {
               {photos.filter(p => selectedPhotos.has(p.id)).map(photo => (
                 <div key={photo.id} className="relative aspect-[3/4] rounded-3xl overflow-hidden group border border-white/5 bg-[#0a0a0a]">
                    <img src={`${R2_CONFIG.publicUrl}/${photo.r2_key_thumbnail}`} className="w-full h-full object-cover" />
+                   <div className="absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-md p-3">
+                      <p className="text-[8px] font-black text-white/50 uppercase tracking-widest truncate">{photo.filename}</p>
+                   </div>
                    {paymentStatus === 'pago' && (
-                     <button onClick={(e) => forceDownload(e, photo)} className="absolute bottom-4 right-4 w-12 h-12 bg-red-600 text-white rounded-2xl flex items-center justify-center shadow-2xl transition-all hover:scale-110 z-50">
+                     <button onClick={(e) => forceDownload(e, photo)} className="absolute top-4 right-4 w-10 h-10 bg-red-600 text-white rounded-xl flex items-center justify-center shadow-2xl transition-all hover:scale-110 z-50">
                         {downloading === photo.id ? <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></div> : ICONS.Download}
                      </button>
                    )}
@@ -323,16 +330,19 @@ const PublicGallery: React.FC = () => {
               ))}
            </div>
            
-           <div className="bg-[#0a0a0a] p-10 md:p-16 rounded-[3rem] max-w-2xl mx-auto border border-white/5 space-y-6">
-              <p className="text-slate-600 text-xs font-bold uppercase tracking-widest">Deseja alterar algo na sua escolha?</p>
-              <Button variant="outline" className="w-full rounded-2xl py-6 font-black uppercase text-[10px] tracking-widest" onClick={() => setIsFinished(false)}>Voltar e Editar Seleção</Button>
+           <div className="bg-[#0a0a0a] p-10 md:p-16 rounded-[3rem] max-w-2xl mx-auto border border-white/5 space-y-8">
+              <div>
+                <p className="text-slate-600 text-[10px] font-black uppercase tracking-widest mb-4">Deseja revisar ou adicionar mais fotos?</p>
+                <Button variant="outline" className="w-full rounded-2xl py-6 font-black uppercase text-[10px] tracking-widest" onClick={() => setIsFinished(false)}>Voltar para a Galeria</Button>
+              </div>
+              <button className="text-slate-800 text-[9px] font-black uppercase tracking-widest hover:text-red-600 transition-colors" onClick={() => { clearSession(); window.location.reload(); }}>Sair do meu perfil</button>
            </div>
         </main>
       )}
 
-      {/* GRADE DE FOTOS */}
+      {/* GRADE DE FOTOS COM IDENTIFICAÇÃO DO ARQUIVO */}
       {!isFinished && (
-        <main ref={photosRef} className="max-w-7xl mx-auto px-4 md:px-6 py-12 md:py-24 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-4 md:gap-12">
+        <main ref={photosRef} className="max-w-7xl mx-auto px-4 md:px-6 py-8 md:py-20 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-4 md:gap-10">
           {photos.map(photo => (
             <div 
               key={photo.id} 
@@ -341,67 +351,110 @@ const PublicGallery: React.FC = () => {
             >
                <img src={`${R2_CONFIG.publicUrl}/${photo.r2_key_thumbnail}`} className="w-full h-full object-cover" loading="lazy" />
                
+               {/* Nome do Arquivo na Grade */}
+               <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent translate-y-2 group-hover:translate-y-0 transition-transform">
+                  <span className="text-[8px] font-black text-white/40 uppercase tracking-widest">{photo.filename}</span>
+               </div>
+
+               {/* Botão Selecionar */}
                <div className="absolute top-4 right-4 z-40" onClick={(e) => { 
                  e.stopPropagation(); 
-                 if(!client) return setShowIdentModal(true); 
+                 if(!client) {
+                   setIdentModalReason('start');
+                   return setShowIdentModal(true);
+                 }
                  const n = new Set(selectedPhotos); 
                  if(n.has(photo.id)) n.delete(photo.id); 
                  else {
-                   if(n.size >= (album?.max_selecoes || 999)) return alert("Você atingiu o limite de fotos deste álbum.");
+                   if(n.size >= (album?.max_selecoes || 999)) return alert("Limite de fotos atingido.");
                    n.add(photo.id);
                  }
                  setSelectedPhotos(n); 
                }}>
-                  <div className={`w-10 h-10 md:w-16 md:h-16 rounded-2xl border flex items-center justify-center transition-all backdrop-blur-2xl ${selectedPhotos.has(photo.id) ? 'bg-red-600 border-red-600 text-white scale-110 shadow-2xl shadow-red-600/30' : 'bg-black/40 border-white/10 text-white/40'}`}>
-                     {selectedPhotos.has(photo.id) ? <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> : <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>}
+                  <div className={`w-10 h-10 md:w-14 md:h-14 rounded-2xl border flex items-center justify-center transition-all backdrop-blur-2xl ${selectedPhotos.has(photo.id) ? 'bg-red-600 border-red-600 text-white scale-110 shadow-2xl shadow-red-600/30' : 'bg-black/40 border-white/10 text-white/40'}`}>
+                     {selectedPhotos.has(photo.id) ? ICONS.CheckSmall : <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>}
                   </div>
                </div>
                
-               <div className="absolute inset-0 flex items-center justify-center opacity-10 pointer-events-none p-10 rotate-[-20deg] grayscale contrast-200">
-                  {photographer?.marca_dagua_url ? <img src={photographer.marca_dagua_url} className="w-full h-full object-contain" /> : <span className="text-white/5 font-black text-2xl uppercase tracking-[1em]">REYEL PRODUÇÕES</span>}
+               <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none p-10 rotate-[-15deg]">
+                  {photographer?.marca_dagua_url ? <img src={photographer.marca_dagua_url} className="w-full h-full object-contain" /> : <span className="text-white font-black text-xl uppercase tracking-[1em]">REYEL</span>}
                </div>
             </div>
           ))}
         </main>
       )}
 
-      {/* MODAL IDENTIFICAÇÃO COM TEXTO MAIS CLARO */}
+      {/* MODAL IDENTIFICAÇÃO DINÂMICO */}
       {showIdentModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/98 backdrop-blur-3xl animate-in fade-in duration-500">
-          <div className="bg-[#0a0a0a] border border-white/10 w-full max-w-md rounded-[3rem] p-12 text-center space-y-10">
-            <div>
-              <h3 className="text-3xl font-black text-white uppercase tracking-tighter">Identificação</h3>
-              <p className="text-slate-600 text-[9px] font-black uppercase mt-4 tracking-widest leading-relaxed">
-                Insira seus dados para começar a escolher suas fotos ou para recuperar uma seleção já feita.
+          <div className="bg-[#0a0a0a] border border-white/10 w-full max-w-md rounded-[3rem] p-10 md:p-14 text-center space-y-8">
+            <div className="space-y-4">
+              <div className="w-16 h-16 bg-red-600/10 text-red-600 rounded-2xl flex items-center justify-center mx-auto border border-red-600/20">{ICONS.Clients}</div>
+              <h3 className="text-3xl font-black text-white uppercase tracking-tighter">
+                {identModalReason === 'access' ? 'Recuperar Seleção' : 'Identificação'}
+              </h3>
+              <p className="text-slate-600 text-[10px] font-black uppercase tracking-widest leading-relaxed">
+                {identModalReason === 'access' 
+                  ? 'Insira seus dados para acessar as fotos que você já salvou anteriormente.' 
+                  : 'Olá! Identifique-se para começar a escolher suas fotos favoritas desta galeria.'}
               </p>
             </div>
             <div className="space-y-4">
-              <input type="text" placeholder="Seu Nome" className="w-full bg-black border border-white/5 rounded-2xl px-8 py-5 text-white font-bold outline-none focus:ring-1 focus:ring-red-600/30" value={clientForm.nome} onChange={e => setClientForm({...clientForm, nome: e.target.value})} />
-              <input type="text" placeholder="WhatsApp (Com DDD)" className="w-full bg-black border border-white/5 rounded-2xl px-8 py-5 text-white font-bold outline-none focus:ring-1 focus:ring-red-600/30" value={clientForm.whatsapp} onChange={e => setClientForm({...clientForm, whatsapp: e.target.value})} />
-              <input type="email" placeholder="E-mail" className="w-full bg-black border border-white/5 rounded-2xl px-8 py-5 text-white font-bold outline-none focus:ring-1 focus:ring-red-600/30" value={clientForm.email} onChange={e => setClientForm({...clientForm, email: e.target.value})} />
+              <input type="text" placeholder="Nome Completo" className="w-full bg-black border border-white/5 rounded-2xl px-6 py-5 text-white font-bold outline-none focus:ring-1 focus:ring-red-600/30" value={clientForm.nome} onChange={e => setClientForm({...clientForm, nome: e.target.value})} />
+              <input type="text" placeholder="WhatsApp (DDD)" className="w-full bg-black border border-white/5 rounded-2xl px-6 py-5 text-white font-bold outline-none focus:ring-1 focus:ring-red-600/30" value={clientForm.whatsapp} onChange={e => setClientForm({...clientForm, whatsapp: e.target.value})} />
+              <input type="email" placeholder="Seu E-mail" className="w-full bg-black border border-white/5 rounded-2xl px-6 py-5 text-white font-bold outline-none focus:ring-1 focus:ring-red-600/30" value={clientForm.email} onChange={e => setClientForm({...clientForm, email: e.target.value})} />
             </div>
-            <Button variant="primary" className="w-full py-6 rounded-3xl font-black uppercase text-xs" isLoading={identifying} onClick={handleIdentification}>Entrar na Galeria</Button>
-            <button className="text-slate-700 text-[10px] font-black uppercase tracking-widest" onClick={() => setShowIdentModal(false)}>Voltar</button>
+            <Button variant="primary" className="w-full py-6 rounded-2xl font-black uppercase text-xs" isLoading={identifying} onClick={handleIdentification}>
+              {identModalReason === 'access' ? 'Entrar e Ver Fotos' : 'Começar Seleção'}
+            </Button>
+            <button className="text-slate-700 text-[9px] font-black uppercase tracking-widest hover:text-white transition-colors" onClick={() => setShowIdentModal(false)}>Voltar para a Galeria</button>
           </div>
         </div>
       )}
 
-      {/* MODAL VISUALIZAÇÃO */}
+      {/* MODAL SEM SELEÇÃO ENCONTRADA */}
+      {noSelectionAlert && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-6 bg-black/95 backdrop-blur-2xl animate-in zoom-in-95">
+           <div className="bg-[#0a0a0a] border border-white/10 w-full max-w-sm rounded-[3rem] p-12 text-center space-y-6">
+              <div className="w-16 h-16 bg-red-600/10 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-600/20">{ICONS.Photo}</div>
+              <h4 className="text-xl font-black text-white uppercase tracking-tight">Nada encontrado</h4>
+              <p className="text-slate-600 text-[10px] font-black uppercase tracking-widest leading-relaxed">
+                 Ainda não identificamos uma seleção de fotos salva para os seus dados. Deseja começar agora?
+              </p>
+              <Button variant="primary" className="w-full py-5 rounded-2xl font-black uppercase text-[10px] tracking-widest" onClick={() => setNoSelectionAlert(false)}>Começar Agora</Button>
+           </div>
+        </div>
+      )}
+
+      {/* MODAL VISUALIZAÇÃO AMPLIADA COM NOME DO ARQUIVO */}
       {viewingPhoto && (
-        <div className="fixed inset-0 z-[110] bg-black/99 backdrop-blur-3xl flex flex-col items-center justify-center p-4 animate-in fade-in duration-500">
-          <button className="absolute top-8 right-8 p-4 text-white/40 font-black text-[10px] uppercase tracking-widest" onClick={() => setViewingPhoto(null)}>Fechar Visualização</button>
-          <div className="relative max-h-[75vh] md:max-h-[85vh] rounded-[2rem] overflow-hidden border border-white/5">
-            <img src={`${R2_CONFIG.publicUrl}/${viewingPhoto.r2_key_original}`} className="max-h-[75vh] md:max-h-[85vh] object-contain pointer-events-none" />
+        <div className="fixed inset-0 z-[110] bg-black/99 backdrop-blur-3xl flex flex-col items-center justify-center p-4 animate-in fade-in duration-300">
+          <header className="absolute top-0 left-0 right-0 p-6 md:p-10 flex justify-between items-center bg-gradient-to-b from-black/80 to-transparent">
+             <div className="flex flex-col">
+                <span className="text-red-600 text-[8px] font-black uppercase tracking-[0.3em]">Arquivo Original</span>
+                <span className="text-white text-sm md:text-xl font-black uppercase tracking-tighter">{viewingPhoto.filename}</span>
+             </div>
+             <button className="w-12 h-12 md:w-16 md:h-16 bg-white/5 text-white/40 rounded-2xl flex items-center justify-center hover:bg-white/10 transition-all" onClick={() => setViewingPhoto(null)}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+             </button>
+          </header>
+
+          <div className="relative max-h-[70vh] md:max-h-[80vh] w-full flex justify-center group">
+            <img src={`${R2_CONFIG.publicUrl}/${viewingPhoto.r2_key_original}`} className="max-h-[70vh] md:max-h-[80vh] object-contain pointer-events-none rounded-2xl border border-white/5 shadow-2xl" />
             <div className="absolute inset-0 flex items-center justify-center opacity-10 p-20 rotate-[-15deg] pointer-events-none grayscale">
-              {photographer?.marca_dagua_url ? <img src={photographer.marca_dagua_url} className="w-full h-full object-contain" /> : <span className="text-white/5 font-black text-6xl uppercase tracking-[1em]">PROTEGIDO</span>}
+              {photographer?.marca_dagua_url ? <img src={photographer.marca_dagua_url} className="w-full h-full object-contain" /> : <span className="text-white font-black text-6xl uppercase tracking-[1em]">PROTEGIDO</span>}
             </div>
           </div>
-          <div className="mt-12">
+
+          <div className="mt-12 flex gap-4">
              <Button 
                variant={selectedPhotos.has(viewingPhoto.id) ? 'primary' : 'premium'} 
-               className="px-12 py-5 rounded-3xl font-black uppercase text-[10px] tracking-widest"
+               className="px-16 py-6 rounded-2xl font-black uppercase text-[10px] tracking-[0.2em]"
                onClick={() => {
-                 if(!client) return setShowIdentModal(true);
+                 if(!client) {
+                   setIdentModalReason('start');
+                   return setShowIdentModal(true);
+                 }
                  const n = new Set(selectedPhotos);
                  if(n.has(viewingPhoto.id)) n.delete(viewingPhoto.id);
                  else {
@@ -411,7 +464,7 @@ const PublicGallery: React.FC = () => {
                  setSelectedPhotos(n);
                }}
              >
-               {selectedPhotos.has(viewingPhoto.id) ? '✓ Foto Selecionada' : 'Adicionar à Minha Seleção'}
+               {selectedPhotos.has(viewingPhoto.id) ? '✓ Foto Selecionada' : 'Adicionar à Seleção'}
              </Button>
           </div>
         </div>
