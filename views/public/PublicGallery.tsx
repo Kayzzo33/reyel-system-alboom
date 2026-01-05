@@ -34,6 +34,7 @@ const PublicGallery: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [isFinishing, setIsFinishing] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
+  const [paymentStatus, setPaymentStatus] = useState('pendente');
   const [showIdentModal, setShowIdentModal] = useState(false);
   const [identModalReason, setIdentModalReason] = useState<'start' | 'access'>('start');
   const [clientForm, setClientForm] = useState({ nome: '', email: '', whatsapp: '' });
@@ -50,12 +51,10 @@ const PublicGallery: React.FC = () => {
   useEffect(() => {
     if (shareToken) fetchAlbum();
     
-    // Bloqueio de Interações Básicas
     const block = (e: any) => e.preventDefault();
     document.addEventListener('contextmenu', block);
     document.addEventListener('dragstart', block);
     
-    // Blindagem Anti-Print Ultra Agressiva (Pre-emptive)
     const handleKeyDown = (e: KeyboardEvent) => {
       if (
         e.key === 'PrintScreen' || 
@@ -70,7 +69,6 @@ const PublicGallery: React.FC = () => {
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
-      // Pequeno atraso para garantir que o software de print não pegue o frame após soltar
       setTimeout(() => setIsProtected(false), 800);
     };
 
@@ -94,11 +92,10 @@ const PublicGallery: React.FC = () => {
 
   useEffect(() => {
     if (album && client?.id) {
-      checkExistingSelection();
+      checkExistingSelection(false);
     }
   }, [album, client]);
 
-  // Função para forçar download no Mobile e Desktop
   const forceDownload = async (url: string, filename: string) => {
     try {
       setDownloading(filename);
@@ -115,7 +112,7 @@ const PublicGallery: React.FC = () => {
       window.URL.revokeObjectURL(blobUrl);
     } catch (err) {
       console.error("Erro no download:", err);
-      window.open(url, '_blank'); // Fallback caso o fetch falhe
+      window.open(url, '_blank');
     } finally {
       setDownloading(null);
     }
@@ -133,7 +130,21 @@ const PublicGallery: React.FC = () => {
       if (existingSels && existingSels.length > 0) {
         const ids = new Set<string>(existingSels.map((s: any) => String(s.photo_id)));
         setSelectedPhotos(ids);
-        if (autoRedirect) setIsFinished(true);
+        
+        // Verifica status do pagamento
+        const { data: pStat } = await supabase
+          .from('order_status')
+          .select('status')
+          .eq('album_id', album.id)
+          .eq('client_id', client.id)
+          .maybeSingle();
+          
+        if (pStat) setPaymentStatus(pStat.status);
+
+        if (autoRedirect) {
+          setIsFinished(true);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
         return true;
       }
       return false;
@@ -183,9 +194,9 @@ const PublicGallery: React.FC = () => {
       if (existingClient) {
         saveSession(existingClient);
         setShowIdentModal(false);
-        if (identModalReason === 'access') {
-          checkExistingSelection(true);
-        } else if (viewingPhoto) {
+        // Ao identificar, sempre checamos se já existe seleção e redirecionamos se for o caso
+        await checkExistingSelection(true);
+        if (identModalReason === 'start' && viewingPhoto) {
           togglePhotoSelection(viewingPhoto.id);
         }
       }
@@ -231,6 +242,17 @@ const PublicGallery: React.FC = () => {
         photo_id: id 
       }));
       await supabase.from('selections').insert(payload);
+      
+      // Atualiza status do pagamento ao finalizar para garantir consistência
+      const { data: pStat } = await supabase
+        .from('order_status')
+        .select('status')
+        .eq('album_id', album?.id)
+        .eq('client_id', client.id)
+        .maybeSingle();
+      if (pStat) setPaymentStatus(pStat.status);
+      else setPaymentStatus('pendente');
+
       setIsFinished(true);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) { alert("Erro ao salvar."); } finally { setIsFinishing(false); }
@@ -246,7 +268,6 @@ const PublicGallery: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#000000] select-none overflow-x-hidden">
       
-      {/* OVERLAY DE PROTEÇÃO PRE-EMPTIVE (Z-100000) */}
       {isProtected && (
         <div className="fixed inset-0 z-[100000] bg-black backdrop-blur-[200px] flex flex-col items-center justify-center pointer-events-none">
           <div className="w-32 h-32 bg-red-600/10 rounded-full animate-ping mb-12 border border-red-600/20"></div>
@@ -256,7 +277,6 @@ const PublicGallery: React.FC = () => {
         </div>
       )}
 
-      {/* CAPA - HERO SECTION */}
       {!isFinished && (
         <section className="h-screen w-full flex flex-col lg:flex-row bg-[#000000] relative overflow-hidden">
            <div className="w-full lg:w-1/2 h-full flex flex-col items-center justify-center p-8 md:p-20 space-y-12 text-center lg:text-left z-10">
@@ -281,7 +301,6 @@ const PublicGallery: React.FC = () => {
         </section>
       )}
 
-      {/* HEADER FIXO */}
       {!isFinished && (
         <header className="sticky top-0 z-[1000] bg-[#000000]/90 backdrop-blur-3xl border-b border-white/5 px-4 md:px-10 py-4 flex justify-between items-center">
           <div className="flex items-center gap-4">
@@ -302,20 +321,35 @@ const PublicGallery: React.FC = () => {
         </header>
       )}
 
-      {/* TELA DE FINALIZAÇÃO / DOWNLOADS */}
+      {/* TELA DE FINALIZAÇÃO - LÓGICA DE PAGAMENTO CORRIGIDA */}
       {isFinished && (
         <main className="max-w-7xl mx-auto px-6 py-12 md:py-20 text-center space-y-12 animate-in fade-in duration-700">
            <header className="flex flex-col items-center gap-6">
               <div className="w-20 h-20 bg-emerald-600/10 text-emerald-600 rounded-3xl flex items-center justify-center border border-emerald-600/20 shadow-2xl shadow-emerald-600/10">{ICONS.Check}</div>
-              <h1 className="text-4xl md:text-6xl font-black text-white tracking-tighter uppercase">Seleção Concluída</h1>
-              <p className="text-slate-500 font-bold max-w-md">Olá {client?.nome}, suas {selectedPhotos.size} fotos foram salvas. {album?.permite_download && 'Você já pode baixá-las abaixo.'}</p>
+              <h1 className="text-4xl md:text-6xl font-black text-white tracking-tighter uppercase">Seleção Salva</h1>
+              <p className="text-slate-500 font-bold max-w-md">Olá {client?.nome}, suas {selectedPhotos.size} fotos estão seguras em nosso sistema.</p>
+              {paymentStatus !== 'pago' && (
+                <div className="bg-red-600/10 border border-red-600/20 px-6 py-3 rounded-2xl text-red-600 font-black text-[10px] uppercase tracking-widest animate-pulse">
+                   Aguardando confirmação de pagamento para liberar downloads originais
+                </div>
+              )}
            </header>
            
            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-8">
               {photos.filter(p => selectedPhotos.has(p.id)).map(photo => (
                 <div key={photo.id} className="relative aspect-[3/4] rounded-3xl overflow-hidden group border border-white/5 bg-[#0a0a0a]">
-                   <img src={`${R2_CONFIG.publicUrl}/${photo.r2_key_thumbnail}`} className="w-full h-full object-cover" />
-                   {album?.permite_download && (
+                   {/* Se pago, mostra original sem marca dagua. Se não, thumbnail com marca dagua */}
+                   <img src={paymentStatus === 'pago' ? `${R2_CONFIG.publicUrl}/${photo.r2_key_original}` : `${R2_CONFIG.publicUrl}/${photo.r2_key_thumbnail}`} className="w-full h-full object-cover" />
+                   
+                   {/* Marca d'água visual se NÃO estiver pago */}
+                   {paymentStatus !== 'pago' && (
+                     <div className="absolute inset-0 flex items-center justify-center opacity-30 pointer-events-none p-6 rotate-[-15deg]">
+                       {photographer?.marca_dagua_url ? <img src={photographer.marca_dagua_url} className="w-full h-full object-contain" /> : <span className="text-white font-black text-xs uppercase tracking-[0.5em]">REYEL</span>}
+                     </div>
+                   )}
+
+                   {/* Botão de download só aparece se estiver PAGO */}
+                   {album?.permite_download && paymentStatus === 'pago' && (
                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                         <Button 
                           variant="primary" 
@@ -333,13 +367,12 @@ const PublicGallery: React.FC = () => {
            </div>
            
            <div className="bg-[#0a0a0a] p-10 md:p-16 rounded-[3rem] max-w-2xl mx-auto border border-white/5 space-y-8">
-              <Button variant="outline" className="w-full rounded-2xl py-6 font-black uppercase text-[10px] tracking-widest" onClick={() => setIsFinished(false)}>Voltar para Galeria</Button>
+              <Button variant="outline" className="w-full rounded-2xl py-6 font-black uppercase text-[10px] tracking-widest" onClick={() => setIsFinished(false)}>Revisar Fotos</Button>
               <button className="text-slate-800 text-[9px] font-black uppercase tracking-widest hover:text-red-600 transition-colors" onClick={() => { clearSession(); window.location.reload(); }}>Sair do meu perfil</button>
            </div>
         </main>
       )}
 
-      {/* GRADE DE FOTOS DO CLIENTE - SEM NOMES DE ARQUIVO */}
       {!isFinished && (
         <main ref={photosRef} className="max-w-7xl mx-auto px-4 md:px-6 py-8 md:py-20 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-4 md:gap-10">
           {photos.map(photo => (
@@ -367,7 +400,6 @@ const PublicGallery: React.FC = () => {
         </main>
       )}
 
-      {/* MODAL IDENTIFICAÇÃO (Z-100000) */}
       {showIdentModal && (
         <div className="fixed inset-0 z-[100000] flex items-center justify-center p-6 bg-black/98 backdrop-blur-[100px] animate-in fade-in duration-300">
           <div className="bg-[#0a0a0a] border border-white/10 w-full max-w-md rounded-[3rem] p-10 text-center space-y-8 shadow-[0_0_150px_rgba(255,0,0,0.2)]">
@@ -394,7 +426,6 @@ const PublicGallery: React.FC = () => {
         </div>
       )}
 
-      {/* VISUALIZAÇÃO AMPLIADA - ESTÉTICA PREMIUM REESTABELECIDA */}
       {viewingPhoto && (
         <div className="fixed inset-0 z-[10000] bg-black/99 backdrop-blur-[150px] flex flex-col items-center justify-center p-4 md:p-10 animate-in fade-in duration-300">
           <header className="absolute top-0 left-0 right-0 p-6 md:p-10 flex justify-between items-center z-[11000]">
