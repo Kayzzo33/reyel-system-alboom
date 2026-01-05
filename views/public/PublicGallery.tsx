@@ -34,12 +34,12 @@ const PublicGallery: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [isFinishing, setIsFinishing] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
-  const [paymentStatus, setPaymentStatus] = useState('pendente');
   const [showIdentModal, setShowIdentModal] = useState(false);
   const [identModalReason, setIdentModalReason] = useState<'start' | 'access'>('start');
   const [clientForm, setClientForm] = useState({ nome: '', email: '', whatsapp: '' });
   const [identifying, setIdentifying] = useState(false);
   const [isProtected, setIsProtected] = useState(false); 
+  const [downloading, setDownloading] = useState<string | null>(null);
 
   const photosRef = useRef<HTMLElement>(null);
   const queryParams = new URLSearchParams(window.location.search);
@@ -55,8 +55,7 @@ const PublicGallery: React.FC = () => {
     document.addEventListener('contextmenu', block);
     document.addEventListener('dragstart', block);
     
-    // Blindagem Anti-Print Ultra Agressiva
-    // Bloqueia ANTES do print ser tirado ao detectar as teclas de atalho
+    // Blindagem Anti-Print Ultra Agressiva (Pre-emptive)
     const handleKeyDown = (e: KeyboardEvent) => {
       if (
         e.key === 'PrintScreen' || 
@@ -71,27 +70,25 @@ const PublicGallery: React.FC = () => {
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
-      // Pequeno atraso para garantir que o software de print não pegue o frame
-      setTimeout(() => {
-        setIsProtected(false);
-      }, 700);
+      // Pequeno atraso para garantir que o software de print não pegue o frame após soltar
+      setTimeout(() => setIsProtected(false), 800);
     };
 
-    const triggerBlurProtection = () => setIsProtected(true);
-    const releaseBlurProtection = () => setIsProtected(false);
+    const triggerBlur = () => setIsProtected(true);
+    const releaseBlur = () => setIsProtected(false);
 
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
-    window.addEventListener('blur', triggerBlurProtection);
-    window.addEventListener('focus', releaseBlurProtection);
+    window.addEventListener('blur', triggerBlur);
+    window.addEventListener('focus', releaseBlur);
     
     return () => {
       document.removeEventListener('contextmenu', block);
       document.removeEventListener('dragstart', block);
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
-      window.removeEventListener('blur', triggerBlurProtection);
-      window.removeEventListener('focus', releaseBlurProtection);
+      window.removeEventListener('blur', triggerBlur);
+      window.removeEventListener('focus', releaseBlur);
     };
   }, [shareToken]);
 
@@ -100,6 +97,29 @@ const PublicGallery: React.FC = () => {
       checkExistingSelection();
     }
   }, [album, client]);
+
+  // Função para forçar download no Mobile e Desktop
+  const forceDownload = async (url: string, filename: string) => {
+    try {
+      setDownloading(filename);
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      console.error("Erro no download:", err);
+      window.open(url, '_blank'); // Fallback caso o fetch falhe
+    } finally {
+      setDownloading(null);
+    }
+  };
 
   const checkExistingSelection = async (autoRedirect = false) => {
     if (!album || !client?.id) return;
@@ -114,19 +134,10 @@ const PublicGallery: React.FC = () => {
         const ids = new Set<string>(existingSels.map((s: any) => String(s.photo_id)));
         setSelectedPhotos(ids);
         if (autoRedirect) setIsFinished(true);
-        
-        const { data: pStat } = await supabase
-          .from('order_status')
-          .select('status')
-          .eq('album_id', album.id)
-          .eq('client_id', client.id)
-          .maybeSingle();
-          
-        if (pStat) setPaymentStatus(pStat.status);
         return true;
       }
       return false;
-    } catch (e) { console.error("Erro seleção:", e); return false; }
+    } catch (e) { return false; }
   };
 
   const fetchAlbum = async () => {
@@ -235,7 +246,7 @@ const PublicGallery: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#000000] select-none overflow-x-hidden">
       
-      {/* OVERLAY DE PROTEÇÃO SEM DELAY - Z-100000 */}
+      {/* OVERLAY DE PROTEÇÃO PRE-EMPTIVE (Z-100000) */}
       {isProtected && (
         <div className="fixed inset-0 z-[100000] bg-black backdrop-blur-[200px] flex flex-col items-center justify-center pointer-events-none">
           <div className="w-32 h-32 bg-red-600/10 rounded-full animate-ping mb-12 border border-red-600/20"></div>
@@ -245,14 +256,14 @@ const PublicGallery: React.FC = () => {
         </div>
       )}
 
-      {/* CAPA - HERO SECTION (SÓ EXPLORAR GALERIA) */}
+      {/* CAPA - HERO SECTION */}
       {!isFinished && (
         <section className="h-screen w-full flex flex-col lg:flex-row bg-[#000000] relative overflow-hidden">
            <div className="w-full lg:w-1/2 h-full flex flex-col items-center justify-center p-8 md:p-20 space-y-12 text-center lg:text-left z-10">
               <div className="space-y-6">
                 <p className="text-red-600 font-black uppercase text-[10px] md:text-xs tracking-[0.4em]">Reyel Barros de Almeida</p>
                 <h1 className="text-4xl md:text-7xl font-black text-white tracking-tighter leading-none uppercase">{album?.nome_galeria}</h1>
-                <p className="text-slate-500 text-sm md:text-lg font-bold max-w-md leading-relaxed">{album?.descricao || "Prepare-se para reviver momentos únicos e inesquecíveis capturados por nossas lentes."}</p>
+                <p className="text-slate-500 text-sm md:text-lg font-bold max-w-md leading-relaxed">{album?.descricao || "Sua história merece ser eternizada com o máximo de cuidado e técnica."}</p>
               </div>
               <div className="w-full md:w-auto">
                 <Button variant="primary" size="lg" className="px-16 py-6 rounded-2xl w-full md:w-auto shadow-[0_0_50px_rgba(255,0,0,0.3)] font-black" onClick={scrollToPhotos}>Explorar Galeria</Button>
@@ -270,7 +281,7 @@ const PublicGallery: React.FC = () => {
         </section>
       )}
 
-      {/* HEADER FIXO COM MINHAS ESCOLHAS */}
+      {/* HEADER FIXO */}
       {!isFinished && (
         <header className="sticky top-0 z-[1000] bg-[#000000]/90 backdrop-blur-3xl border-b border-white/5 px-4 md:px-10 py-4 flex justify-between items-center">
           <div className="flex items-center gap-4">
@@ -291,23 +302,38 @@ const PublicGallery: React.FC = () => {
         </header>
       )}
 
-      {/* TELA DE FINALIZAÇÃO */}
+      {/* TELA DE FINALIZAÇÃO / DOWNLOADS */}
       {isFinished && (
         <main className="max-w-7xl mx-auto px-6 py-12 md:py-20 text-center space-y-12 animate-in fade-in duration-700">
            <header className="flex flex-col items-center gap-6">
               <div className="w-20 h-20 bg-emerald-600/10 text-emerald-600 rounded-3xl flex items-center justify-center border border-emerald-600/20 shadow-2xl shadow-emerald-600/10">{ICONS.Check}</div>
-              <h1 className="text-4xl md:text-6xl font-black text-white tracking-tighter uppercase">Seleção Salva</h1>
-              <p className="text-slate-500 font-bold max-w-md">Olá {client?.nome}, suas {selectedPhotos.size} fotos estão seguras em nosso sistema.</p>
+              <h1 className="text-4xl md:text-6xl font-black text-white tracking-tighter uppercase">Seleção Concluída</h1>
+              <p className="text-slate-500 font-bold max-w-md">Olá {client?.nome}, suas {selectedPhotos.size} fotos foram salvas. {album?.permite_download && 'Você já pode baixá-las abaixo.'}</p>
            </header>
+           
            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-8">
               {photos.filter(p => selectedPhotos.has(p.id)).map(photo => (
                 <div key={photo.id} className="relative aspect-[3/4] rounded-3xl overflow-hidden group border border-white/5 bg-[#0a0a0a]">
                    <img src={`${R2_CONFIG.publicUrl}/${photo.r2_key_thumbnail}`} className="w-full h-full object-cover" />
+                   {album?.permite_download && (
+                     <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <Button 
+                          variant="primary" 
+                          size="sm" 
+                          className="rounded-xl px-4 py-2" 
+                          isLoading={downloading === photo.filename}
+                          onClick={() => forceDownload(`${R2_CONFIG.publicUrl}/${photo.r2_key_original}`, photo.filename)}
+                        >
+                          {ICONS.Download}
+                        </Button>
+                     </div>
+                   )}
                 </div>
               ))}
            </div>
+           
            <div className="bg-[#0a0a0a] p-10 md:p-16 rounded-[3rem] max-w-2xl mx-auto border border-white/5 space-y-8">
-              <Button variant="outline" className="w-full rounded-2xl py-6 font-black uppercase text-[10px] tracking-widest" onClick={() => setIsFinished(false)}>Revisar Fotos</Button>
+              <Button variant="outline" className="w-full rounded-2xl py-6 font-black uppercase text-[10px] tracking-widest" onClick={() => setIsFinished(false)}>Voltar para Galeria</Button>
               <button className="text-slate-800 text-[9px] font-black uppercase tracking-widest hover:text-red-600 transition-colors" onClick={() => { clearSession(); window.location.reload(); }}>Sair do meu perfil</button>
            </div>
         </main>
@@ -368,7 +394,7 @@ const PublicGallery: React.FC = () => {
         </div>
       )}
 
-      {/* VISUALIZAÇÃO AMPLIADA - ESTÉTICA PREMIUM RESTAURADA */}
+      {/* VISUALIZAÇÃO AMPLIADA - ESTÉTICA PREMIUM REESTABELECIDA */}
       {viewingPhoto && (
         <div className="fixed inset-0 z-[10000] bg-black/99 backdrop-blur-[150px] flex flex-col items-center justify-center p-4 md:p-10 animate-in fade-in duration-300">
           <header className="absolute top-0 left-0 right-0 p-6 md:p-10 flex justify-between items-center z-[11000]">
