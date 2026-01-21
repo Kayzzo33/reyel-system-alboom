@@ -51,26 +51,17 @@ const PublicGallery: React.FC = () => {
   useEffect(() => {
     if (shareToken) fetchAlbum();
     
+    // Bloqueios de interface (Desktop)
     const block = (e: any) => e.preventDefault();
     document.addEventListener('contextmenu', block);
     document.addEventListener('dragstart', block);
     
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (
-        e.key === 'PrintScreen' || 
-        e.key === 'Control' || 
-        e.key === 'Shift' || 
-        e.key === 'Meta' || 
-        e.key === 'Alt' ||
-        (e.ctrlKey && e.key === 'p')
-      ) {
+      if (e.key === 'PrintScreen' || e.ctrlKey || e.shiftKey || e.metaKey || e.altKey) {
         setIsProtected(true);
       }
     };
-
-    const handleKeyUp = () => {
-      setTimeout(() => setIsProtected(false), 800);
-    };
+    const handleKeyUp = () => setTimeout(() => setIsProtected(false), 800);
 
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
@@ -91,6 +82,7 @@ const PublicGallery: React.FC = () => {
     }
   }, [album, client]);
 
+  // Função de download real (Blob) para forçar o download no mobile e desktop
   const forceDownload = async (url: string, filename: string) => {
     try {
       setDownloading(filename);
@@ -105,6 +97,7 @@ const PublicGallery: React.FC = () => {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(blobUrl);
     } catch (err) {
+      console.error("Download falhou:", err);
       window.open(url, '_blank');
     } finally {
       setDownloading(null);
@@ -124,6 +117,7 @@ const PublicGallery: React.FC = () => {
         const ids = new Set<string>(existingSels.map((s: any) => String(s.photo_id)));
         setSelectedPhotos(ids);
         
+        // Busca status do pagamento
         const { data: pStat } = await supabase
           .from('order_status')
           .select('status')
@@ -183,9 +177,9 @@ const PublicGallery: React.FC = () => {
       if (existingClient) {
         saveSession(existingClient);
         setShowIdentModal(false);
-        // CRITICAL: Redireciona imediatamente se já houver fotos
-        const hasSelection = await checkExistingSelection(true);
-        if (!hasSelection && identModalReason === 'start' && viewingPhoto) {
+        // REDIRECIONAMENTO AUTOMÁTICO SE JÁ TIVER SELEÇÃO
+        const hasExisting = await checkExistingSelection(true);
+        if (!hasExisting && identModalReason === 'start' && viewingPhoto) {
           togglePhotoSelection(viewingPhoto.id);
         }
       }
@@ -232,6 +226,7 @@ const PublicGallery: React.FC = () => {
       }));
       await supabase.from('selections').insert(payload);
       
+      // Re-busca status do pagamento ao finalizar
       const { data: pStat } = await supabase
         .from('order_status')
         .select('status')
@@ -242,7 +237,7 @@ const PublicGallery: React.FC = () => {
 
       setIsFinished(true);
       window.scrollTo({ top: 0, behavior: 'smooth' });
-    } catch (err) { alert("Erro ao salvar."); } finally { setIsFinishing(false); }
+    } catch (err) { alert("Erro ao salvar seleção."); } finally { setIsFinishing(false); }
   };
 
   if (loading) return (
@@ -264,19 +259,19 @@ const PublicGallery: React.FC = () => {
         </div>
       )}
 
-      {/* CAPA - HERO */}
+      {/* CAPA - HERO SECTION */}
       {!isFinished && (
         <section className="h-screen w-full flex flex-col lg:flex-row bg-[#000000] relative overflow-hidden">
            <div className="w-full lg:w-1/2 h-full flex flex-col items-center justify-center p-8 md:p-20 space-y-12 text-center lg:text-left z-10">
               <div className="space-y-6">
                 <p className="text-red-600 font-black uppercase text-[10px] md:text-xs tracking-[0.4em]">Reyel Barros de Almeida</p>
                 <h1 className="text-4xl md:text-7xl font-black text-white tracking-tighter leading-none uppercase">{album?.nome_galeria}</h1>
-                <p className="text-slate-500 text-sm md:text-lg font-bold max-w-md leading-relaxed">{album?.descricao || "Prepare-se para reviver seus melhores momentos."}</p>
+                <p className="text-slate-500 text-sm md:text-lg font-bold max-w-md leading-relaxed">{album?.descricao || "Sua história merece ser eternizada com o máximo de cuidado e técnica."}</p>
               </div>
-              <Button variant="primary" size="lg" className="px-16 py-6 rounded-2xl w-full md:w-auto shadow-2xl font-black" onClick={scrollToPhotos}>Explorar Galeria</Button>
+              <Button variant="primary" size="lg" className="px-16 py-6 rounded-2xl w-full md:w-auto shadow-[0_0_50px_rgba(255,0,0,0.3)] font-black" onClick={scrollToPhotos}>Explorar Galeria</Button>
            </div>
            <div className="w-full lg:w-1/2 h-full relative group">
-              {album?.capa_url && <img src={album.capa_url} className="w-full h-full object-cover opacity-60" alt="Capa" />}
+              {album?.capa_url && <img src={album.capa_url} className="w-full h-full object-cover opacity-60 group-hover:scale-110 transition-transform duration-[3000ms]" alt="Capa" />}
               <div className="absolute inset-0 bg-gradient-to-r from-[#000000] via-transparent to-transparent hidden lg:block"></div>
            </div>
         </section>
@@ -286,7 +281,7 @@ const PublicGallery: React.FC = () => {
       {!isFinished && (
         <header className="sticky top-0 z-[1000] bg-[#000000]/90 backdrop-blur-3xl border-b border-white/5 px-4 md:px-10 py-4 flex justify-between items-center">
           <div className="flex items-center gap-4">
-             <div className="w-10 h-10 md:w-12 md:h-12 bg-[#0a0a0a] rounded-xl border border-white/5 flex items-center justify-center overflow-hidden">
+             <div className="w-10 h-10 md:w-12 md:h-12 bg-[#0a0a0a] rounded-xl border border-white/5 flex items-center justify-center overflow-hidden shadow-2xl">
                {photographer?.logo_url ? <img src={photographer.logo_url} className="w-full h-full object-contain p-2" /> : <span className="text-red-600 font-black text-sm">R</span>}
              </div>
              <div className="hidden sm:block">
@@ -303,7 +298,7 @@ const PublicGallery: React.FC = () => {
         </header>
       )}
 
-      {/* TELA DE CONCLUSÃO / DOWNLOAD */}
+      {/* TELA DE CONCLUSÃO / DOWNLOADS - COM LÓGICA DE PAGAMENTO */}
       {isFinished && (
         <main className="max-w-7xl mx-auto px-6 py-12 md:py-20 text-center space-y-12 animate-in fade-in duration-700">
            <header className="flex flex-col items-center gap-6">
@@ -311,7 +306,7 @@ const PublicGallery: React.FC = () => {
                 {ICONS.Check}
               </div>
               <h1 className="text-4xl md:text-6xl font-black text-white tracking-tighter uppercase">Seleção Salva</h1>
-              <p className="text-slate-500 font-bold max-w-md">Olá {client?.nome}, suas {selectedPhotos.size} fotos estão seguras.</p>
+              <p className="text-slate-500 font-bold max-w-md">Olá {client?.nome}, sua seleção de {selectedPhotos.size} fotos foi salva em nosso sistema.</p>
               
               {paymentStatus !== 'pago' ? (
                 <div className="bg-red-600/10 border border-red-600/20 px-8 py-4 rounded-2xl text-red-600 font-black text-[10px] uppercase tracking-widest flex items-center gap-4 animate-pulse">
@@ -321,7 +316,7 @@ const PublicGallery: React.FC = () => {
               ) : (
                 <div className="bg-emerald-600/10 border border-emerald-600/20 px-8 py-4 rounded-2xl text-emerald-600 font-black text-[10px] uppercase tracking-widest flex items-center gap-4">
                    <div className="w-2 h-2 bg-emerald-600 rounded-full"></div>
-                   PAGAMENTO CONFIRMADO: Downloads liberados em alta resolução
+                   PEDIDO PAGO: Downloads liberados em alta resolução
                 </div>
               )}
            </header>
@@ -329,30 +324,30 @@ const PublicGallery: React.FC = () => {
            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-8">
               {photos.filter(p => selectedPhotos.has(p.id)).map(photo => (
                 <div key={photo.id} className="relative aspect-[3/4] rounded-3xl overflow-hidden group border border-white/5 bg-[#0a0a0a]">
-                   {/* Foto com trava: se não pago, usa thumbnail; se pago, original */}
+                   {/* Se pago: mostra original. Se não: mostra thumb com marca d'água */}
                    <img 
                      src={paymentStatus === 'pago' ? `${R2_CONFIG.publicUrl}/${photo.r2_key_original}` : `${R2_CONFIG.publicUrl}/${photo.r2_key_thumbnail}`} 
                      className="w-full h-full object-cover" 
                    />
                    
-                   {/* Marca d'água se NÃO pago */}
+                   {/* Marca d'água OBRIGATÓRIA se não estiver pago */}
                    {paymentStatus !== 'pago' && (
                      <div className="absolute inset-0 flex items-center justify-center opacity-30 pointer-events-none p-6 rotate-[-15deg]">
-                       {photographer?.marca_dagua_url ? <img src={photographer.marca_dagua_url} className="w-full h-full object-contain" /> : <span className="text-white font-black text-xs uppercase tracking-[0.5em]">REYEL</span>}
+                       {photographer?.marca_dagua_url ? <img src={photographer.marca_dagua_url} className="w-full h-full object-contain" /> : <span className="text-white font-black text-xs uppercase tracking-[0.5em]">REYEL PRODUÇÕES</span>}
                      </div>
                    )}
 
-                   {/* Botão de Download SÓ se Pago */}
+                   {/* Botão de Download Flutuante (Apenas se pago) */}
                    {album?.permite_download && paymentStatus === 'pago' && (
-                     <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                     <div className="absolute bottom-4 left-4 right-4 opacity-100 lg:opacity-0 group-hover:opacity-100 transition-all z-50">
                         <Button 
                           variant="primary" 
                           size="sm" 
-                          className="rounded-xl px-4 py-2" 
+                          className="w-full rounded-2xl py-4 shadow-2xl flex items-center justify-center gap-3 backdrop-blur-md" 
                           isLoading={downloading === photo.filename}
                           onClick={() => forceDownload(`${R2_CONFIG.publicUrl}/${photo.r2_key_original}`, photo.filename)}
                         >
-                          {ICONS.Download}
+                          {ICONS.Download} <span className="text-[9px]">BAIXAR AGORA</span>
                         </Button>
                      </div>
                    )}
@@ -361,13 +356,13 @@ const PublicGallery: React.FC = () => {
            </div>
            
            <div className="bg-[#0a0a0a] p-10 md:p-16 rounded-[3rem] max-w-2xl mx-auto border border-white/5 space-y-8">
-              <Button variant="outline" className="w-full rounded-2xl py-6 font-black uppercase text-[10px] tracking-widest" onClick={() => setIsFinished(false)}>Revisar Fotos</Button>
-              <button className="text-slate-800 text-[9px] font-black uppercase tracking-widest hover:text-red-600 transition-colors" onClick={() => { clearSession(); window.location.reload(); }}>Sair do meu perfil</button>
+              <Button variant="outline" className="w-full rounded-2xl py-6 font-black uppercase text-[10px] tracking-widest" onClick={() => setIsFinished(false)}>Revisar Minha Seleção</Button>
+              <button className="text-slate-800 text-[9px] font-black uppercase tracking-widest hover:text-red-600 transition-colors" onClick={() => { clearSession(); window.location.reload(); }}>Sair da minha conta</button>
            </div>
         </main>
       )}
 
-      {/* GRADE DE SELEÇÃO */}
+      {/* GRADE DE SELEÇÃO INICIAL */}
       {!isFinished && (
         <main ref={photosRef} className="max-w-7xl mx-auto px-4 md:px-6 py-8 md:py-20 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-4 md:gap-10">
           {photos.map(photo => (
@@ -382,6 +377,7 @@ const PublicGallery: React.FC = () => {
                      {selectedPhotos.has(photo.id) ? ICONS.CheckSmall : <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>}
                   </div>
                </div>
+               {/* Marca d'água na grade de seleção */}
                <div className="absolute inset-0 flex items-center justify-center opacity-30 pointer-events-none p-10 rotate-[-15deg]">
                   {photographer?.marca_dagua_url ? <img src={photographer.marca_dagua_url} className="w-full h-full object-contain" /> : <span className="text-white font-black text-xl uppercase tracking-[1em]">REYEL</span>}
                </div>
@@ -390,36 +386,36 @@ const PublicGallery: React.FC = () => {
         </main>
       )}
 
-      {/* MODAL IDENTIFICAÇÃO */}
+      {/* MODAL IDENTIFICAÇÃO / CADASTRO */}
       {showIdentModal && (
-        <div className="fixed inset-0 z-[100000] flex items-center justify-center p-6 bg-black/98 backdrop-blur-[100px]">
-          <div className="bg-[#0a0a0a] border border-white/10 w-full max-w-md rounded-[3rem] p-10 text-center space-y-8">
+        <div className="fixed inset-0 z-[100000] flex items-center justify-center p-6 bg-black/98 backdrop-blur-[100px] animate-in fade-in duration-300">
+          <div className="bg-[#0a0a0a] border border-white/10 w-full max-w-md rounded-[3rem] p-10 text-center space-y-8 shadow-[0_0_150px_rgba(255,0,0,0.2)]">
             <h3 className="text-3xl font-black text-white uppercase tracking-tighter">
               {identModalReason === 'access' ? 'Recuperar Escolhas' : 'Identificação'}
             </h3>
             <div className="space-y-4 text-left">
               <div className="space-y-1">
                 <label className="text-[9px] font-black text-slate-700 uppercase tracking-widest ml-2">Nome Completo</label>
-                <input type="text" className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 text-white font-bold outline-none focus:ring-1 focus:ring-red-600/30" value={clientForm.nome} onChange={e => setClientForm({...clientForm, nome: e.target.value})} />
+                <input type="text" className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 text-white font-bold outline-none focus:ring-1 focus:ring-red-600/40" value={clientForm.nome} onChange={e => setClientForm({...clientForm, nome: e.target.value})} />
               </div>
               <div className="space-y-1">
                 <label className="text-[9px] font-black text-slate-700 uppercase tracking-widest ml-2">WhatsApp</label>
-                <input type="text" className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 text-white font-bold outline-none focus:ring-1 focus:ring-red-600/30" value={clientForm.whatsapp} onChange={e => setClientForm({...clientForm, whatsapp: e.target.value})} />
+                <input type="text" className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 text-white font-bold outline-none focus:ring-1 focus:ring-red-600/40" value={clientForm.whatsapp} onChange={e => setClientForm({...clientForm, whatsapp: e.target.value})} />
               </div>
               <div className="space-y-1">
                 <label className="text-[9px] font-black text-slate-700 uppercase tracking-widest ml-2">E-mail</label>
-                <input type="email" className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 text-white font-bold outline-none focus:ring-1 focus:ring-red-600/30" value={clientForm.email} onChange={e => setClientForm({...clientForm, email: e.target.value})} />
+                <input type="email" className="w-full bg-black border border-white/5 rounded-2xl px-6 py-4 text-white font-bold outline-none focus:ring-1 focus:ring-red-600/40" value={clientForm.email} onChange={e => setClientForm({...clientForm, email: e.target.value})} />
               </div>
             </div>
-            <Button variant="primary" className="w-full py-6 rounded-2xl font-black shadow-xl uppercase tracking-widest" isLoading={identifying} onClick={handleIdentification}>Acessar Galeria</Button>
-            <button className="text-slate-700 text-[9px] font-black uppercase tracking-widest hover:text-white" onClick={() => setShowIdentModal(false)}>Voltar</button>
+            <Button variant="primary" className="w-full py-6 rounded-2xl font-black shadow-xl uppercase tracking-widest" isLoading={identifying} onClick={handleIdentification}>Acessar Minha Galeria</Button>
+            <button className="text-slate-700 text-[9px] font-black uppercase tracking-widest hover:text-white" onClick={() => setShowIdentModal(false)}>Voltar para Fotos</button>
           </div>
         </div>
       )}
 
       {/* VISUALIZAÇÃO AMPLIADA */}
       {viewingPhoto && (
-        <div className="fixed inset-0 z-[10000] bg-black/99 backdrop-blur-[150px] flex flex-col items-center justify-center p-4 md:p-10">
+        <div className="fixed inset-0 z-[10000] bg-black/99 backdrop-blur-[150px] flex flex-col items-center justify-center p-4 md:p-10 animate-in fade-in duration-300">
           <header className="absolute top-0 left-0 right-0 p-6 md:p-10 flex justify-between items-center z-[11000]">
              <span className="text-red-600 text-[9px] font-black uppercase tracking-[0.4em]">Visualização Protegida</span>
              <button className="w-12 h-12 bg-white/5 text-white rounded-2xl flex items-center justify-center hover:bg-red-600 transition-all shadow-2xl border border-white/5" onClick={() => setViewingPhoto(null)}>
