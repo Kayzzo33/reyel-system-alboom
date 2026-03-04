@@ -13,6 +13,7 @@ const Dashboard: React.FC<{ onAction?: () => void }> = ({ onAction }) => {
     ticketMedio: 0
   });
   const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [chartData, setChartData] = useState<{label: string, value: number}[]>([]);
 
   useEffect(() => {
@@ -21,17 +22,71 @@ const Dashboard: React.FC<{ onAction?: () => void }> = ({ onAction }) => {
 
   const fetchDashboardData = async () => {
     try {
+      setErrorMsg(null);
+      console.log("Iniciando fetchDashboardData...");
       setLoading(true);
-      const { count: albumsCount } = await supabase.from('albums').select('*', { count: 'exact', head: true });
-      const { count: clientsCount } = await supabase.from('clients').select('*', { count: 'exact', head: true });
-      const { count: photosCount } = await supabase.from('photos').select('*', { count: 'exact', head: true });
       
-      const { data: selections } = await supabase
-        .from('selections')
-        .select(`
-          created_at,
-          album:album_id(preco_por_foto)
-        `);
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+      
+      const user = session?.user;
+      if (!user) {
+        setErrorMsg("Usuário não autenticado");
+        setLoading(false);
+        return;
+      }
+
+      console.log("Buscando contagens...");
+      const [albumsRes, clientsRes] = await Promise.all([
+        supabase.from('albums').select('id', { count: 'exact' }).eq('photographer_id', user.id),
+        supabase.from('clients').select('id', { count: 'exact' }).eq('photographer_id', user.id)
+      ]);
+
+      if (albumsRes.error) console.error("Erro albums:", albumsRes.error);
+      if (clientsRes.error) console.error("Erro clients:", clientsRes.error);
+
+      // Buscar fotos separadamente para evitar travamento com inner join
+      console.log("Buscando fotos...");
+      let photosCount = 0;
+      const { data: userAlbums, error: userAlbumsError } = await supabase.from('albums').select('id, preco_por_foto').eq('photographer_id', user.id);
+      
+      let albumIds: string[] = [];
+      const albumPriceMap: Record<string, number> = {};
+
+      if (userAlbumsError) {
+        console.error("Erro ao buscar álbuns do usuário para contagem de fotos:", userAlbumsError);
+      } else if (userAlbums && userAlbums.length > 0) {
+        albumIds = userAlbums.map(a => a.id);
+        userAlbums.forEach(a => {
+          albumPriceMap[a.id] = a.preco_por_foto || 15;
+        });
+
+        // Dividir em lotes se houver muitos álbuns para evitar erro de URL muito longa
+        const { count, error: photosError } = await supabase.from('photos').select('id', { count: 'exact' }).in('album_id', albumIds);
+        if (photosError) {
+          console.error("Erro photos:", photosError);
+        } else {
+          photosCount = count || 0;
+        }
+      }
+
+      console.log("Resultados das contagens:", { albums: albumsRes.count, clients: clientsRes.count, photos: photosCount });
+
+      console.log("Buscando seleções...");
+      let selections: any[] = [];
+      if (albumIds.length > 0) {
+        const { data, error: selError } = await supabase
+          .from('selections')
+          .select('created_at, album_id')
+          .in('album_id', albumIds);
+
+        if (selError) {
+          console.error("Erro ao buscar seleções:", selError);
+          throw selError;
+        }
+        selections = data || [];
+      }
+      console.log("Seleções retornadas:", selections.length);
 
       let totalRevenue = 0;
       const dailyMap: { [key: string]: number } = {};
@@ -43,9 +98,9 @@ const Dashboard: React.FC<{ onAction?: () => void }> = ({ onAction }) => {
         dailyMap[dateStr] = 0;
       }
 
-      if (selections) {
+      if (selections.length > 0) {
         selections.forEach((sel: any) => {
-          const price = sel.album?.preco_por_foto || 15;
+          const price = albumPriceMap[sel.album_id] || 15;
           totalRevenue += price;
           const dateLabel = new Date(sel.created_at).toLocaleDateString('pt-BR', { weekday: 'short' }).toUpperCase();
           if (dailyMap[dateLabel] !== undefined) {
@@ -61,15 +116,17 @@ const Dashboard: React.FC<{ onAction?: () => void }> = ({ onAction }) => {
 
       setChartData(formattedChartData);
       setStats({
-        albums: albumsCount || 0,
-        clients: clientsCount || 0,
-        photos: photosCount || 0,
+        albums: albumsRes.count || 0,
+        clients: clientsRes.count || 0,
+        photos: photosCount,
         revenue: totalRevenue,
-        ticketMedio: clientsCount ? totalRevenue / clientsCount : 0
+        ticketMedio: clientsRes.count ? totalRevenue / clientsRes.count : 0
       });
+      console.log("Dados do dashboard atualizados com sucesso");
 
-    } catch (err) {
+    } catch (err: any) {
       console.error("Erro ao carregar dashboard:", err);
+      setErrorMsg(err.message || "Erro desconhecido ao carregar dados");
     } finally {
       setLoading(false);
     }
@@ -93,6 +150,12 @@ const Dashboard: React.FC<{ onAction?: () => void }> = ({ onAction }) => {
           {loading ? 'Sincronizando...' : 'Sincronizar Dados'}
         </Button>
       </header>
+
+      {errorMsg && (
+        <div className="bg-red-600/10 border border-red-600/20 p-4 rounded-xl text-red-500 text-sm font-bold">
+          Erro ao carregar dados: {errorMsg}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {statCards.map((stat, idx) => (

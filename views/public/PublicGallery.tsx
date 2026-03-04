@@ -14,6 +14,18 @@ const useClientSession = (albumId: string) => {
       return saved ? JSON.parse(saved) : null;
     } catch { return null; }
   });
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(key);
+      if (saved) {
+        setClient(JSON.parse(saved));
+      } else {
+        setClient(null);
+      }
+    } catch { setClient(null); }
+  }, [key]);
+
   const saveSession = (clientData: Partial<Client>) => {
     localStorage.setItem(key, JSON.stringify(clientData));
     setClient(clientData);
@@ -78,9 +90,9 @@ const PublicGallery: React.FC = () => {
 
   useEffect(() => {
     if (album && client?.id) {
-      checkExistingSelection(false);
+      checkExistingSelection(true);
     }
-  }, [album, client]);
+  }, [album?.id, client?.id]);
 
   // Função de download real (Blob) para forçar o download no mobile e desktop
   const forceDownload = async (url: string, filename: string) => {
@@ -226,18 +238,43 @@ const PublicGallery: React.FC = () => {
       }));
       await supabase.from('selections').insert(payload);
       
-      // Re-busca status do pagamento ao finalizar
+      // Re-busca status do pagamento ao finalizar ou reseta se for nova seleção
       const { data: pStat } = await supabase
         .from('order_status')
         .select('status')
         .eq('album_id', album?.id)
         .eq('client_id', client.id)
         .maybeSingle();
-      setPaymentStatus(pStat?.status || 'pendente');
+        
+      if (pStat && pStat.status === 'pago' && selectedPhotos.size > 0) {
+         // Se já estava pago e fez nova seleção (passou pelo aviso), volta pra pendente
+         await supabase.from('order_status').upsert({
+           album_id: album?.id,
+           client_id: client.id,
+           status: 'pendente'
+         }, { onConflict: 'album_id,client_id' });
+         setPaymentStatus('pendente');
+      } else {
+         setPaymentStatus(pStat?.status || 'pendente');
+      }
 
       setIsFinished(true);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) { alert("Erro ao salvar seleção."); } finally { setIsFinishing(false); }
+  };
+
+  const handleSelectMorePhotos = () => {
+    if (paymentStatus === 'pago') {
+      const confirm = window.confirm("ATENÇÃO: Se você apertar em selecionar mais fotos, todas as imagens anteriores vão sumir. Certifique-se de fazer o download de todas as imagens da seleção atual para fazer uma nova seleção. Deseja continuar?");
+      if (confirm) {
+        setSelectedPhotos(new Set());
+        setIsFinished(false);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    } else {
+      setIsFinished(false);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   };
 
   if (loading) return (
@@ -339,7 +376,7 @@ const PublicGallery: React.FC = () => {
 
                    {/* Botão de Download Flutuante (Apenas se pago) */}
                    {album?.permite_download && paymentStatus === 'pago' && (
-                     <div className="absolute bottom-4 left-4 right-4 opacity-100 lg:opacity-0 group-hover:opacity-100 transition-all z-50">
+                     <div className="absolute bottom-4 left-4 right-4 z-50">
                         <Button 
                           variant="primary" 
                           size="sm" 
@@ -356,7 +393,9 @@ const PublicGallery: React.FC = () => {
            </div>
            
            <div className="bg-[#0a0a0a] p-10 md:p-16 rounded-[3rem] max-w-2xl mx-auto border border-white/5 space-y-8">
-              <Button variant="outline" className="w-full rounded-2xl py-6 font-black uppercase text-[10px] tracking-widest" onClick={() => setIsFinished(false)}>Revisar Minha Seleção</Button>
+              <Button variant="outline" className="w-full rounded-2xl py-6 font-black uppercase text-[10px] tracking-widest" onClick={handleSelectMorePhotos}>
+                {paymentStatus === 'pago' ? 'Selecionar Mais Fotos' : 'Revisar Minha Seleção'}
+              </Button>
               <button className="text-slate-800 text-[9px] font-black uppercase tracking-widest hover:text-red-600 transition-colors" onClick={() => { clearSession(); window.location.reload(); }}>Sair da minha conta</button>
            </div>
         </main>
