@@ -98,19 +98,55 @@ const PublicGallery: React.FC = () => {
   const forceDownload = async (url: string, filename: string) => {
     try {
       setDownloading(filename);
-      const response = await fetch(url);
+      
+      // Para contornar problemas de CORS com o R2, usamos fetch com mode 'cors'
+      // O bucket R2 precisa estar com as regras de CORS configuradas para permitir GET da origem atual
+      const response = await fetch(url, {
+        method: 'GET',
+        mode: 'cors', // Força requisição CORS
+        headers: {
+          // Evita cache para garantir que pegamos a imagem fresca
+          'Cache-Control': 'no-cache'
+        }
+      });
+      
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      
       const blob = await response.blob();
       const blobUrl = window.URL.createObjectURL(blob);
+      
       const link = document.createElement('a');
+      link.style.display = 'none';
       link.href = blobUrl;
-      link.download = filename;
+      // Força o nome do arquivo no download
+      link.setAttribute('download', filename || 'foto.jpg');
+      
+      // Necessário anexar ao body para funcionar no Firefox e alguns mobiles
       document.body.appendChild(link);
       link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(blobUrl);
+      
+      // Limpeza
+      setTimeout(() => {
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(blobUrl);
+      }, 100);
+      
     } catch (err) {
-      console.error("Download falhou:", err);
-      window.open(url, '_blank');
+      console.error("Download via Blob falhou, tentando método alternativo:", err);
+      
+      // Fallback 1: Tentar forçar o download via atributo download em um link direto
+      try {
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', filename || 'foto.jpg');
+        link.target = '_blank';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } catch (fallbackErr) {
+        // Fallback 2: Apenas abrir em nova aba como último recurso
+        window.open(url, '_blank');
+      }
     } finally {
       setDownloading(null);
     }
