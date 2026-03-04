@@ -375,14 +375,17 @@ const PublicGallery: React.FC = () => {
                    )}
 
                    {/* Botão de Download Flutuante (Apenas se pago) */}
-                   {album?.permite_download && paymentStatus === 'pago' && (
+                   {paymentStatus === 'pago' && (
                      <div className="absolute bottom-4 left-4 right-4 z-50">
                         <Button 
                           variant="primary" 
                           size="sm" 
                           className="w-full rounded-2xl py-4 shadow-2xl flex items-center justify-center gap-3 backdrop-blur-md" 
                           isLoading={downloading === photo.filename}
-                          onClick={() => forceDownload(`${R2_CONFIG.publicUrl}/${photo.r2_key_original}`, photo.filename)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            forceDownload(`${R2_CONFIG.publicUrl}/${photo.r2_key_original}`, photo.filename);
+                          }}
                         >
                           {ICONS.Download} <span className="text-[9px]">BAIXAR AGORA</span>
                         </Button>
