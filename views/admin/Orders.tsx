@@ -111,6 +111,16 @@ const Orders: React.FC = () => {
     } catch (err) { alert("Erro ao atualizar status."); }
   };
 
+  const handleCopyFilenames = (order: OrderGroup) => {
+    const filenames = order.photos.map(p => p.filename).join(', ');
+    navigator.clipboard.writeText(filenames).then(() => {
+      alert("Nomes das fotos copiados para a área de transferência!");
+    }).catch(err => {
+      console.error("Erro ao copiar:", err);
+      alert("Não foi possível copiar os nomes.");
+    });
+  };
+
   const openWhatsApp = (order: OrderGroup) => {
     const total = (order.photo_count * (profile?.default_price_per_photo || order.preco_por_foto)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     const message = `Olá ${order.client_nome.split(' ')[0]}! 👋%0A%0AConferi aqui sua seleção de *${order.photo_count} fotos* no álbum *${order.album_nome}*.%0A%0A💰 O valor total ficou em *${total}*.%0A%0A🔑 *Chave PIX:* ${profile?.pix_key || 'Favor solicitar chave pix'}%0A%0AFico no aguardo do comprovante para liberar o download das fotos originais em alta resolução! 😊`;
@@ -168,7 +178,15 @@ const Orders: React.FC = () => {
                   <div className="border-t border-white/5 bg-black/40 p-6 md:p-10 animate-in slide-in-from-top duration-300">
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
                        <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Fotos Selecionadas ({order.photo_count})</h4>
-                       <div className="flex gap-2">
+                       <div className="flex flex-wrap gap-2">
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="rounded-xl px-4 border-white/10 text-slate-400 hover:text-white"
+                            onClick={() => handleCopyFilenames(order)}
+                          >
+                            Copiar Nomes
+                          </Button>
                           <Button 
                             variant={order.status === 'pago' ? 'ghost' : 'primary'} 
                             size="sm" 
