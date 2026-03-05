@@ -99,9 +99,12 @@ const PublicGallery: React.FC = () => {
     try {
       setDownloading(filename);
       
+      // Adiciona um timestamp para evitar problemas de cache no mobile (que podem causar falha no CORS)
+      const fetchUrl = url.includes('?') ? `${url}&t=${new Date().getTime()}` : `${url}?t=${new Date().getTime()}`;
+      
       // Para contornar problemas de CORS com o R2, usamos fetch com mode 'cors'
       // O bucket R2 precisa estar com as regras de CORS configuradas para permitir GET da origem atual
-      const response = await fetch(url, {
+      const response = await fetch(fetchUrl, {
         method: 'GET',
         mode: 'cors', // Força requisição CORS
         headers: {
@@ -125,11 +128,11 @@ const PublicGallery: React.FC = () => {
       document.body.appendChild(link);
       link.click();
       
-      // Limpeza
+      // Limpeza (Aumentado para 5 segundos para garantir que o mobile tenha tempo de iniciar o download)
       setTimeout(() => {
         document.body.removeChild(link);
         window.URL.revokeObjectURL(blobUrl);
-      }, 100);
+      }, 5000);
       
     } catch (err) {
       console.error("Download via Blob falhou, tentando método alternativo:", err);
