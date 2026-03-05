@@ -99,18 +99,13 @@ const PublicGallery: React.FC = () => {
     try {
       setDownloading(filename);
       
-      // Adiciona um timestamp para evitar problemas de cache no mobile (que podem causar falha no CORS)
-      const fetchUrl = url.includes('?') ? `${url}&t=${new Date().getTime()}` : `${url}?t=${new Date().getTime()}`;
-      
-      // Para contornar problemas de CORS com o R2, usamos fetch com mode 'cors'
-      // O bucket R2 precisa estar com as regras de CORS configuradas para permitir GET da origem atual
-      const response = await fetch(fetchUrl, {
+      // Removemos headers customizados (como Cache-Control) e parâmetros de URL
+      // para evitar requisições de preflight (OPTIONS) que costumam ser bloqueadas 
+      // por CORS em redes móveis (3G/4G) e navegadores mobile restritos.
+      // Isso transforma a chamada em um "Simple Request" seguro.
+      const response = await fetch(url, {
         method: 'GET',
-        mode: 'cors', // Força requisição CORS
-        headers: {
-          // Evita cache para garantir que pegamos a imagem fresca
-          'Cache-Control': 'no-cache'
-        }
+        mode: 'cors'
       });
       
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
@@ -119,16 +114,24 @@ const PublicGallery: React.FC = () => {
       const blobUrl = window.URL.createObjectURL(blob);
       
       const link = document.createElement('a');
-      link.style.display = 'none';
+      
+      // Em vez de display: none (que o iOS Safari pode ignorar e cancelar o clique), 
+      // usamos position absolute fora da tela.
+      link.style.position = 'absolute';
+      link.style.left = '-9999px';
+      link.style.visibility = 'hidden';
+      
       link.href = blobUrl;
       // Força o nome do arquivo no download
-      link.setAttribute('download', filename || 'foto.jpg');
+      link.download = filename || 'foto.jpg';
       
-      // Necessário anexar ao body para funcionar no Firefox e alguns mobiles
+      // Necessário anexar ao body para funcionar no Firefox e Safari Mobile
       document.body.appendChild(link);
+      
+      // Dispara o clique nativo
       link.click();
       
-      // Limpeza (Aumentado para 5 segundos para garantir que o mobile tenha tempo de iniciar o download)
+      // Limpeza (5 segundos para garantir que o mobile tenha tempo de iniciar o download)
       setTimeout(() => {
         document.body.removeChild(link);
         window.URL.revokeObjectURL(blobUrl);
@@ -137,19 +140,15 @@ const PublicGallery: React.FC = () => {
     } catch (err) {
       console.error("Download via Blob falhou, tentando método alternativo:", err);
       
-      // Fallback 1: Tentar forçar o download via atributo download em um link direto
-      try {
-        const link = document.createElement('a');
-        link.href = url;
-        link.setAttribute('download', filename || 'foto.jpg');
-        link.target = '_blank';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      } catch (fallbackErr) {
-        // Fallback 2: Apenas abrir em nova aba como último recurso
-        window.open(url, '_blank');
-      }
+      // Fallback: Se o CORS bloquear o fetch no mobile, a única forma nativa 
+      // sem um servidor proxy é abrir a imagem em uma nova aba.
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename || 'foto.jpg';
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     } finally {
       setDownloading(null);
     }
