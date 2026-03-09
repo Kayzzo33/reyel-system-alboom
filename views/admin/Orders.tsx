@@ -112,7 +112,7 @@ const Orders: React.FC = () => {
   };
 
   const handleCopyFilenames = (order: OrderGroup) => {
-    const filenames = order.photos.map(p => p.filename).join(', ');
+    const filenames = order.photos.map(p => p.filename.replace(/\.[^/.]+$/, "")).join(', ');
     navigator.clipboard.writeText(filenames).then(() => {
       alert("Nomes das fotos copiados para a área de transferência!");
     }).catch(err => {
