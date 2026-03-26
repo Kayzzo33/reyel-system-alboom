@@ -62,11 +62,15 @@ const Dashboard: React.FC<{ onAction?: () => void }> = ({ onAction }) => {
         });
 
         // Dividir em lotes se houver muitos álbuns para evitar erro de URL muito longa
-        const { count, error: photosError } = await supabase.from('photos').select('id', { count: 'exact' }).in('album_id', albumIds);
-        if (photosError) {
-          console.error("Erro photos:", photosError);
-        } else {
-          photosCount = count || 0;
+        const batchSize = 100;
+        for (let i = 0; i < albumIds.length; i += batchSize) {
+          const batch = albumIds.slice(i, i + batchSize);
+          const { count, error: photosError } = await supabase.from('photos').select('id', { count: 'exact' }).in('album_id', batch);
+          if (photosError) {
+            console.error("Erro photos:", photosError);
+          } else {
+            photosCount += count || 0;
+          }
         }
       }
 
@@ -75,16 +79,34 @@ const Dashboard: React.FC<{ onAction?: () => void }> = ({ onAction }) => {
       console.log("Buscando seleções...");
       let selections: any[] = [];
       if (albumIds.length > 0) {
-        const { data, error: selError } = await supabase
-          .from('selections')
-          .select('created_at, album_id')
-          .in('album_id', albumIds);
+        const batchSize = 100;
+        for (let i = 0; i < albumIds.length; i += batchSize) {
+          const batch = albumIds.slice(i, i + batchSize);
+          let from = 0;
+          const step = 1000;
+          let hasMore = true;
+          
+          while (hasMore) {
+            const { data, error: selError } = await supabase
+              .from('selections')
+              .select('created_at, album_id')
+              .in('album_id', batch)
+              .range(from, from + step - 1);
 
-        if (selError) {
-          console.error("Erro ao buscar seleções:", selError);
-          throw selError;
+            if (selError) {
+              console.error("Erro ao buscar seleções:", selError);
+              throw selError;
+            }
+            
+            if (data && data.length > 0) {
+              selections = [...selections, ...data];
+              from += step;
+              if (data.length < step) hasMore = false;
+            } else {
+              hasMore = false;
+            }
+          }
         }
-        selections = data || [];
       }
       console.log("Seleções retornadas:", selections.length);
 

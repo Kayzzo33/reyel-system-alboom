@@ -46,30 +46,66 @@ const Orders: React.FC = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { data: selections, error } = await supabase
-        .from('selections')
-        .select(`
-          id,
-          created_at,
-          album:album_id!inner(id, nome_galeria, preco_por_foto, photographer_id),
-          client:client_id!inner(id, nome, whatsapp, email),
-          photo:photo_id(*)
-        `)
-        .eq('album.photographer_id', user.id)
-        .order('created_at', { ascending: false });
+      let allSelections: any[] = [];
+      let from = 0;
+      const step = 1000;
+      let hasMore = true;
+      
+      while (hasMore) {
+        const { data: selectionsData, error } = await supabase
+          .from('selections')
+          .select(`
+            id,
+            created_at,
+            album:album_id!inner(id, nome_galeria, preco_por_foto, photographer_id),
+            client:client_id!inner(id, nome, whatsapp, email),
+            photo:photo_id(*)
+          `)
+          .eq('album.photographer_id', user.id)
+          .order('created_at', { ascending: false })
+          .range(from, from + step - 1);
 
-      if (error) throw error;
+        if (error) throw error;
+        
+        if (selectionsData && selectionsData.length > 0) {
+          allSelections = [...allSelections, ...selectionsData];
+          from += step;
+          if (selectionsData.length < step) hasMore = false;
+        } else {
+          hasMore = false;
+        }
+      }
 
-      const { data: statuses } = await supabase.from('order_status').select('*');
+      let allStatuses: any[] = [];
+      let fromStatus = 0;
+      let hasMoreStatus = true;
+      
+      while (hasMoreStatus) {
+        const { data: statusesData, error: statusError } = await supabase
+          .from('order_status')
+          .select('*')
+          .range(fromStatus, fromStatus + step - 1);
+          
+        if (statusError) throw statusError;
+        
+        if (statusesData && statusesData.length > 0) {
+          allStatuses = [...allStatuses, ...statusesData];
+          fromStatus += step;
+          if (statusesData.length < step) hasMoreStatus = false;
+        } else {
+          hasMoreStatus = false;
+        }
+      }
+
       const groups: { [key: string]: OrderGroup } = {};
 
-      selections?.forEach((sel: any) => {
+      allSelections.forEach((sel: any) => {
         const albumData = sel.album;
         const clientData = sel.client;
         if (!albumData || !clientData) return;
 
         const key = `${albumData.id}-${clientData.id}`;
-        const currentStatus = statuses?.find(s => s.album_id === albumData.id && s.client_id === clientData.id)?.status || 'pendente';
+        const currentStatus = allStatuses.find(s => s.album_id === albumData.id && s.client_id === clientData.id)?.status || 'pendente';
 
         if (!groups[key]) {
           groups[key] = {

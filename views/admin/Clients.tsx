@@ -20,9 +20,29 @@ const Clients: React.FC = () => {
   const fetchClients = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase.from('clients').select('*').order('nome');
-      if (error) throw error;
-      setClients(data || []);
+      let allClients: any[] = [];
+      let from = 0;
+      const step = 1000;
+      let hasMore = true;
+      
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('clients')
+          .select('*')
+          .order('nome')
+          .range(from, from + step - 1);
+          
+        if (error) throw error;
+        
+        if (data && data.length > 0) {
+          allClients = [...allClients, ...data];
+          from += step;
+          if (data.length < step) hasMore = false;
+        } else {
+          hasMore = false;
+        }
+      }
+      setClients(allClients);
     } catch (err) {
       console.error('Erro ao buscar clientes:', err);
     } finally {

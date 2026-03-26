@@ -28,6 +28,19 @@ const App: React.FC = () => {
         if (active) {
           setSession(s);
           setLoading(false);
+          
+          if (s?.user) {
+            const { data: profile } = await supabase.from('profiles').select('logo_url').eq('id', s.user.id).maybeSingle();
+            if (profile?.logo_url) {
+              let link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
+              if (!link) {
+                link = document.createElement('link');
+                link.rel = 'icon';
+                document.head.appendChild(link);
+              }
+              link.href = profile.logo_url;
+            }
+          }
         }
       } catch (err) {
         if (active) setLoading(false);

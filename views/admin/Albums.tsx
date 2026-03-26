@@ -191,9 +191,36 @@ const Albums: React.FC<{ initialOpenModal?: boolean; onModalClose?: () => void }
     setSelectedAlbum(album);
     setLoadingPhotos(true);
     try {
-      const { data } = await supabase.from('photos').select('*').eq('album_id', album.id).order('ordem', { ascending: true });
-      setAlbumPhotos(data || []);
-    } finally { setLoadingPhotos(false); }
+      let allPhotos: any[] = [];
+      let from = 0;
+      const step = 1000;
+      let hasMore = true;
+      
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('photos')
+          .select('*')
+          .eq('album_id', album.id)
+          .order('ordem', { ascending: true })
+          .range(from, from + step - 1);
+          
+        if (error) throw error;
+        
+        if (data && data.length > 0) {
+          allPhotos = [...allPhotos, ...data];
+          from += step;
+          if (data.length < step) hasMore = false;
+        } else {
+          hasMore = false;
+        }
+      }
+      
+      setAlbumPhotos(allPhotos);
+    } catch (err) {
+      console.error(err);
+    } finally { 
+      setLoadingPhotos(false); 
+    }
   };
 
   const openEditModal = () => {

@@ -94,6 +94,18 @@ const PublicGallery: React.FC = () => {
     }
   }, [album?.id, client?.id]);
 
+  useEffect(() => {
+    if (photographer?.logo_url) {
+      let link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
+      if (!link) {
+        link = document.createElement('link');
+        link.rel = 'icon';
+        document.head.appendChild(link);
+      }
+      link.href = photographer.logo_url;
+    }
+  }, [photographer?.logo_url]);
+
   // Função de download real (Blob) para forçar o download no mobile e desktop
   const forceDownload = async (url: string, filename: string) => {
     try {
@@ -157,14 +169,32 @@ const PublicGallery: React.FC = () => {
   const checkExistingSelection = async (autoRedirect = false) => {
     if (!album || !client?.id) return false;
     try {
-      const { data: existingSels } = await supabase
-        .from('selections')
-        .select('photo_id')
-        .eq('album_id', album.id)
-        .eq('client_id', client.id);
+      let allSels: any[] = [];
+      let from = 0;
+      const step = 1000;
+      let hasMore = true;
+      
+      while (hasMore) {
+        const { data: existingSels, error } = await supabase
+          .from('selections')
+          .select('photo_id')
+          .eq('album_id', album.id)
+          .eq('client_id', client.id)
+          .range(from, from + step - 1);
+          
+        if (error) throw error;
         
-      if (existingSels && existingSels.length > 0) {
-        const ids = new Set<string>(existingSels.map((s: any) => String(s.photo_id)));
+        if (existingSels && existingSels.length > 0) {
+          allSels = [...allSels, ...existingSels];
+          from += step;
+          if (existingSels.length < step) hasMore = false;
+        } else {
+          hasMore = false;
+        }
+      }
+        
+      if (allSels.length > 0) {
+        const ids = new Set<string>(allSels.map((s: any) => String(s.photo_id)));
         setSelectedPhotos(ids);
         
         // Busca status do pagamento
@@ -190,10 +220,36 @@ const PublicGallery: React.FC = () => {
   const fetchAlbum = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase.from('albums').select('*, photos(*)').eq('share_token', shareToken).single();
+      const { data, error } = await supabase.from('albums').select('*').eq('share_token', shareToken).single();
       if (error) throw error;
       setAlbum(data);
-      setPhotos(data.photos || []);
+      
+      let allPhotos: any[] = [];
+      let from = 0;
+      const step = 1000;
+      let hasMore = true;
+      
+      while (hasMore) {
+        const { data: photosData, error: photosError } = await supabase
+          .from('photos')
+          .select('*')
+          .eq('album_id', data.id)
+          .order('ordem', { ascending: true })
+          .range(from, from + step - 1);
+          
+        if (photosError) throw photosError;
+        
+        if (photosData && photosData.length > 0) {
+          allPhotos = [...allPhotos, ...photosData];
+          from += step;
+          if (photosData.length < step) hasMore = false;
+        } else {
+          hasMore = false;
+        }
+      }
+      
+      setPhotos(allPhotos);
+      
       const { data: prof } = await supabase.from('profiles').select('*').eq('id', data.photographer_id).single();
       setPhotographer(prof);
     } catch (err) { console.error(err); } finally { setLoading(false); }
@@ -274,7 +330,13 @@ const PublicGallery: React.FC = () => {
         client_id: client.id, 
         photo_id: id 
       }));
-      await supabase.from('selections').insert(payload);
+      
+      const chunkSize = 500;
+      for (let i = 0; i < payload.length; i += chunkSize) {
+        const chunk = payload.slice(i, i + chunkSize);
+        const { error } = await supabase.from('selections').insert(chunk);
+        if (error) throw error;
+      }
       
       // Re-busca status do pagamento ao finalizar ou reseta se for nova seleção
       const { data: pStat } = await supabase
@@ -408,7 +470,7 @@ const PublicGallery: React.FC = () => {
                    {/* Marca d'água OBRIGATÓRIA se não estiver pago */}
                    {paymentStatus !== 'pago' && (
                      <div className="absolute inset-0 flex items-center justify-center opacity-30 pointer-events-none p-6 rotate-[-15deg]">
-                       {photographer?.marca_dagua_url ? <img src={photographer.marca_dagua_url} className="w-full h-full object-contain" /> : <span className="text-white font-black text-xs uppercase tracking-[0.5em]">REYEL PRODUÇÕES</span>}
+                       {photographer?.marca_dagua_url ? <img src={photographer.marca_dagua_url} className="w-full h-full object-contain" /> : photographer?.logo_url ? <img src={photographer.logo_url} className="w-full h-full object-contain opacity-50" /> : <span className="text-white font-black text-xs uppercase tracking-[0.5em]">REYEL PRODUÇÕES</span>}
                      </div>
                    )}
 
@@ -459,7 +521,7 @@ const PublicGallery: React.FC = () => {
                </div>
                {/* Marca d'água na grade de seleção */}
                <div className="absolute inset-0 flex items-center justify-center opacity-30 pointer-events-none p-10 rotate-[-15deg]">
-                  {photographer?.marca_dagua_url ? <img src={photographer.marca_dagua_url} className="w-full h-full object-contain" /> : <span className="text-white font-black text-xl uppercase tracking-[1em]">REYEL</span>}
+                  {photographer?.marca_dagua_url ? <img src={photographer.marca_dagua_url} className="w-full h-full object-contain" /> : photographer?.logo_url ? <img src={photographer.logo_url} className="w-full h-full object-contain opacity-50" /> : <span className="text-white font-black text-xl uppercase tracking-[1em]">REYEL</span>}
                </div>
             </div>
           ))}
@@ -506,7 +568,7 @@ const PublicGallery: React.FC = () => {
           <div className="relative max-h-[70vh] md:max-h-[85vh] w-full flex justify-center z-[10500]">
             <img src={`${R2_CONFIG.publicUrl}/${viewingPhoto.r2_key_original}`} className="max-h-[70vh] md:max-h-[85vh] object-contain pointer-events-none rounded-3xl" />
             <div className="absolute inset-0 flex items-center justify-center opacity-45 p-10 md:p-20 rotate-[-15deg] pointer-events-none grayscale">
-              {photographer?.marca_dagua_url ? <img src={photographer.marca_dagua_url} className="w-full h-full object-contain" /> : <span className="text-white font-black text-6xl uppercase tracking-[1em]">REYEL PRODUÇÕES</span>}
+              {photographer?.marca_dagua_url ? <img src={photographer.marca_dagua_url} className="w-full h-full object-contain" /> : photographer?.logo_url ? <img src={photographer.logo_url} className="w-full h-full object-contain opacity-50" /> : <span className="text-white font-black text-6xl uppercase tracking-[1em]">REYEL PRODUÇÕES</span>}
             </div>
           </div>
 
