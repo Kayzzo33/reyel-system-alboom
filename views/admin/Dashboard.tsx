@@ -38,8 +38,8 @@ const Dashboard: React.FC<{ onAction?: () => void }> = ({ onAction }) => {
 
       console.log("Buscando contagens...");
       const [albumsRes, clientsRes] = await Promise.all([
-        supabase.from('albums').select('id', { count: 'exact' }).eq('photographer_id', user.id),
-        supabase.from('clients').select('id', { count: 'exact' }).eq('photographer_id', user.id)
+        supabase.from('albums').select('id', { count: 'exact', head: true }).eq('photographer_id', user.id),
+        supabase.from('clients').select('id', { count: 'exact', head: true }).eq('photographer_id', user.id)
       ]);
 
       if (albumsRes.error) console.error("Erro albums:", albumsRes.error);
@@ -65,7 +65,7 @@ const Dashboard: React.FC<{ onAction?: () => void }> = ({ onAction }) => {
         const batchSize = 100;
         for (let i = 0; i < albumIds.length; i += batchSize) {
           const batch = albumIds.slice(i, i + batchSize);
-          const { count, error: photosError } = await supabase.from('photos').select('id', { count: 'exact' }).in('album_id', batch);
+          const { count, error: photosError } = await supabase.from('photos').select('id', { count: 'exact', head: true }).in('album_id', batch);
           if (photosError) {
             console.error("Erro photos:", photosError);
           } else {

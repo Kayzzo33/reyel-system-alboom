@@ -234,7 +234,7 @@ const PublicGallery: React.FC = () => {
           .from('photos')
           .select('*')
           .eq('album_id', data.id)
-          .order('ordem', { ascending: true })
+          .order('filename', { ascending: true })
           .range(from, from + step - 1);
           
         if (photosError) throw photosError;

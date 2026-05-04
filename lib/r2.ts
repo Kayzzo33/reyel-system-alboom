@@ -31,10 +31,8 @@ export async function uploadToR2Direct(file: File | Blob, key: string): Promise<
   const url = `https://${R2_CONFIG.accountId}.r2.cloudflarestorage.com/${R2_CONFIG.bucketName}/${key}`;
   
   try {
-    const arrayBuffer = await file.arrayBuffer();
-    
-    // Deixamos o Content-Type ser definido apenas se for um File. 
-    // Se for Blob (miniatura), o R2 assume application/octet-stream ou detecta.
+    // Passamos o Blob/File diretamente para evitar carregar MBs inteiros em um ArrayBuffer na memória
+    // antes mesmo de a requisição começar (previne Out Of Memory).
     const headers: Record<string, string> = {};
     if (file instanceof File && file.type) {
       headers['Content-Type'] = file.type;
@@ -42,7 +40,7 @@ export async function uploadToR2Direct(file: File | Blob, key: string): Promise<
 
     const response = await r2Client.fetch(url, {
       method: 'PUT',
-      body: arrayBuffer,
+      body: file,
       headers
     });
 

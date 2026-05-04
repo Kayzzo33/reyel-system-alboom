@@ -180,7 +180,9 @@ const Albums: React.FC<{ initialOpenModal?: boolean; onModalClose?: () => void }
     let currentInFlight = 0;
     let completedCount = 0;
     let nextIndexToStart = 0;
-    const concurrency = 4;
+    // Reduzido para 2 para impedir picos de memória e "Out of Memory" (OOM) no navegador
+    // especialmente quando a tela desliga e o Garbage Collector para.
+    const concurrency = 2;
 
     await new Promise<void>((resolve) => {
         const processNext = async () => {
@@ -244,7 +246,7 @@ const Albums: React.FC<{ initialOpenModal?: boolean; onModalClose?: () => void }
           .from('photos')
           .select('*')
           .eq('album_id', album.id)
-          .order('ordem', { ascending: true })
+          .order('filename', { ascending: true })
           .range(from, from + step - 1);
           
         if (error) throw error;
