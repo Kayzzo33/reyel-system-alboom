@@ -155,28 +155,71 @@ const Albums: React.FC<{ initialOpenModal?: boolean; onModalClose?: () => void }
   };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []) as File[];
+    const rawFiles = Array.from(e.target.files || []) as File[];
+    const files = rawFiles.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+    
     const albumId = createdAlbumId || selectedAlbum?.id;
     if (!albumId) return;
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      try {
-        setUploadStatus(`Enviando ${i + 1}/${files.length}...`);
-        const { originalKey, thumbKey } = await uploadPhotoWithThumbnail(file, albumId, (step) => {
-          setUploadStatus(`[${i + 1}/${files.length}] ${step}`);
-        });
-
-        await supabase.from('photos').insert([{
-          album_id: albumId,
-          r2_key_original: originalKey,
-          r2_key_thumbnail: thumbKey,
-          filename: file.name,
-          tamanho_bytes: file.size,
-          ordem: i
-        }]);
-      } catch (err) { console.error(err); }
+    let startOrdem = 0;
+    try {
+      const { data: maxOrdemData } = await supabase
+         .from('photos')
+         .select('ordem')
+         .eq('album_id', albumId)
+         .order('ordem', { ascending: false })
+         .limit(1)
+         .maybeSingle();
+      if (maxOrdemData && maxOrdemData.ordem !== null && maxOrdemData.ordem !== undefined) {
+          startOrdem = maxOrdemData.ordem + 1;
+      }
+    } catch (err) {
+      console.warn("Could not get max ordem", err);
     }
+
+    let currentInFlight = 0;
+    let completedCount = 0;
+    let nextIndexToStart = 0;
+    const concurrency = 4;
+
+    await new Promise<void>((resolve) => {
+        const processNext = async () => {
+            if (nextIndexToStart >= files.length) {
+                if (currentInFlight === 0) resolve();
+                return;
+            }
+            const i = nextIndexToStart++;
+            const file = files[i];
+            const currentOrdem = startOrdem + i;
+            currentInFlight++;
+
+            setUploadStatus(`Enviando ${Math.min(completedCount + 1, files.length)}/${files.length}...`);
+
+            try {
+                const { originalKey, thumbKey } = await uploadPhotoWithThumbnail(file, albumId, () => {});
+
+                await supabase.from('photos').insert([{
+                    album_id: albumId,
+                    r2_key_original: originalKey,
+                    r2_key_thumbnail: thumbKey,
+                    filename: file.name,
+                    tamanho_bytes: file.size,
+                    ordem: currentOrdem
+                }]);
+            } catch (err) { 
+                console.error("Erro ao subir:", file.name, err); 
+            } finally {
+                completedCount++;
+                currentInFlight--;
+                setUploadStatus(`Enviado ${completedCount}/${files.length}`);
+                processNext();
+            }
+        };
+
+        for (let j = 0; j < Math.min(concurrency, files.length); j++) {
+            processNext();
+        }
+    });
     
     setUploadStatus(null);
     if (selectedAlbum) handleManageAlbum(selectedAlbum);

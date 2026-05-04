@@ -64,31 +64,31 @@ export async function uploadToR2Direct(file: File | Blob, key: string): Promise<
  */
 async function createThumbnail(file: File, maxWidth = 600): Promise<Blob> {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = (event) => {
-      const img = new Image();
-      img.src = event.target?.result as string;
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const scale = Math.min(1, maxWidth / img.width);
-        canvas.width = img.width * scale;
-        canvas.height = img.height * scale;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return reject(new Error("Canvas failure"));
-        
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        
-        canvas.toBlob((blob) => {
-          if (blob) resolve(blob);
-          else reject(new Error("Blob failure"));
-        }, 'image/webp', 0.85);
-      };
-      img.onerror = () => reject(new Error("Img load error"));
+    const objectUrl = URL.createObjectURL(file);
+    const img = new Image();
+    img.src = objectUrl;
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      const canvas = document.createElement('canvas');
+      const scale = Math.min(1, maxWidth / img.width);
+      canvas.width = img.width * scale;
+      canvas.height = img.height * scale;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return reject(new Error("Canvas failure"));
+      
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      
+      canvas.toBlob((blob) => {
+        if (blob) resolve(blob);
+        else reject(new Error("Blob failure"));
+      }, 'image/webp', 0.85);
     };
-    reader.onerror = () => reject(new Error("Read error"));
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("Img load error"));
+    };
   });
 }
 
