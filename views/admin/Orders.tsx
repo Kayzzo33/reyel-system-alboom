@@ -52,11 +52,12 @@ const Orders: React.FC = () => {
       let hasMore = true;
       
       while (hasMore) {
-        const { data: selectionsData, error } = await supabase
+        let fetchQuery = supabase
           .from('selections')
           .select(`
             id,
             created_at,
+            is_paid,
             album:album_id!inner(id, nome_galeria, preco_por_foto, photographer_id),
             client:client_id!inner(id, nome, whatsapp, email),
             photo:photo_id(*)
@@ -64,6 +65,26 @@ const Orders: React.FC = () => {
           .eq('album.photographer_id', user.id)
           .order('created_at', { ascending: false })
           .range(from, from + step - 1);
+
+        let { data: selectionsData, error } = await fetchQuery;
+        
+        if (error && error.message?.includes('is_paid')) {
+          const retry = await supabase
+            .from('selections')
+            .select(`
+              id,
+              created_at,
+              album:album_id!inner(id, nome_galeria, preco_por_foto, photographer_id),
+              client:client_id!inner(id, nome, whatsapp, email),
+              photo:photo_id(*)
+            `)
+            .eq('album.photographer_id', user.id)
+            .order('created_at', { ascending: false })
+            .range(from, from + step - 1);
+            
+          selectionsData = retry.data;
+          error = retry.error;
+        }
 
         if (error) throw error;
         
@@ -124,7 +145,7 @@ const Orders: React.FC = () => {
         }
         
         groups[key].photo_count += 1;
-        if (sel.photo) groups[key].photos.push(sel.photo);
+        if (sel.photo) groups[key].photos.push({ ...sel.photo, is_paid: sel.is_paid });
       });
 
       setOrders(Object.values(groups).sort((a, b) => new Date(b.latest_date).getTime() - new Date(a.latest_date).getTime()));
@@ -143,6 +164,20 @@ const Orders: React.FC = () => {
         status: newStatus 
       }, { onConflict: 'album_id,client_id' });
       if (error) throw error;
+
+      if (newStatus === 'pago' || newStatus === 'pendente') {
+        const { error: selError } = await supabase
+          .from('selections')
+          .update({ is_paid: newStatus === 'pago' })
+          .eq('album_id', order.album_id)
+          .eq('client_id', order.client_id);
+        if (selError && !selError.message?.includes('is_paid')) {
+            console.error("Failed to update paid status:", selError);
+        } else if (selError) {
+            console.warn("is_paid column doesn't exist yet, ignoring.");
+        }
+      }
+      
       fetchOrders();
     } catch (err) { alert("Erro ao atualizar status."); }
   };
@@ -236,8 +271,11 @@ const Orders: React.FC = () => {
                     
                     <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">
                       {order.photos.map((photo: any) => (
-                        <div key={photo.id} className="flex flex-col gap-2">
-                          <div className="aspect-[3/4] rounded-2xl overflow-hidden border border-white/5 bg-[#0a0a0a] shadow-lg">
+                        <div key={photo.id} className="flex flex-col gap-2 relative">
+                          <div className="aspect-[3/4] rounded-2xl overflow-hidden border border-white/5 bg-[#0a0a0a] shadow-lg relative">
+                            {photo.is_paid && (
+                              <div className="absolute top-2 right-2 bg-emerald-600 border border-emerald-500 text-white text-[8px] font-black uppercase tracking-widest px-2 py-1 rounded shadow-lg z-10">Pago</div>
+                            )}
                             <img 
                               src={`${R2_CONFIG.publicUrl}/${photo.r2_key_thumbnail}`} 
                               className="w-full h-full object-cover" 

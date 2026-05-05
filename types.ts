@@ -51,6 +51,7 @@ export interface Photo {
   largura?: number;
   altura?: number;
   ordem: number;
+  is_paid?: boolean; // Injetado da seleção
 }
 
 export interface Selection {
@@ -59,6 +60,7 @@ export interface Selection {
   photo_id: string;
   client_id: string;
   created_at?: string;
+  is_paid?: boolean;
   photo?: Photo;
 }
 

@@ -42,6 +42,7 @@ const PublicGallery: React.FC = () => {
   const [photographer, setPhotographer] = useState<Profile | null>(null);
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [selectedPhotos, setSelectedPhotos] = useState<Set<string>>(new Set());
+  const [paidPhotos, setPaidPhotos] = useState<Set<string>>(new Set());
   const [viewingPhoto, setViewingPhoto] = useState<Photo | null>(null);
   const [loading, setLoading] = useState(true);
   const [isFinishing, setIsFinishing] = useState(false);
@@ -175,13 +176,28 @@ const PublicGallery: React.FC = () => {
       let hasMore = true;
       
       while (hasMore) {
-        const { data: existingSels, error } = await supabase
+        let fetchQuery = supabase
           .from('selections')
-          .select('photo_id')
+          .select('photo_id, is_paid')
           .eq('album_id', album.id)
           .eq('client_id', client.id)
           .range(from, from + step - 1);
           
+        let { data: existingSels, error } = await fetchQuery;
+        
+        // Fallback case user hasn't added the `is_paid` column yet
+        if (error && error.message?.includes('is_paid')) {
+           const retry = await supabase
+            .from('selections')
+            .select('photo_id')
+            .eq('album_id', album.id)
+            .eq('client_id', client.id)
+            .range(from, from + step - 1);
+            
+           existingSels = retry.data;
+           error = retry.error;
+        }
+
         if (error) throw error;
         
         if (existingSels && existingSels.length > 0) {
@@ -195,7 +211,9 @@ const PublicGallery: React.FC = () => {
         
       if (allSels.length > 0) {
         const ids = new Set<string>(allSels.map((s: any) => String(s.photo_id)));
+        const paidIds = new Set<string>(allSels.filter((s:any) => s.is_paid).map((s: any) => String(s.photo_id)));
         setSelectedPhotos(ids);
+        setPaidPhotos(paidIds);
         
         // Busca status do pagamento
         const { data: pStat } = await supabase
@@ -298,6 +316,9 @@ const PublicGallery: React.FC = () => {
       setShowIdentModal(true);
       return;
     }
+    if (paidPhotos.has(photoId)) {
+      return alert("Esta foto já foi paga e não pode ser removida.");
+    }
     const n = new Set(selectedPhotos);
     if (n.has(photoId)) n.delete(photoId);
     else {
@@ -328,14 +349,22 @@ const PublicGallery: React.FC = () => {
       const payload = Array.from(selectedPhotos).map(id => ({ 
         album_id: album?.id, 
         client_id: client.id, 
-        photo_id: id 
+        photo_id: id,
+        is_paid: paidPhotos.has(id)
       }));
       
       const chunkSize = 500;
       for (let i = 0; i < payload.length; i += chunkSize) {
         const chunk = payload.slice(i, i + chunkSize);
         const { error } = await supabase.from('selections').insert(chunk);
-        if (error) throw error;
+        
+        if (error && error.message?.includes('is_paid')) {
+           const fallbackChunk = chunk.map(({ is_paid, ...rest }) => rest);
+           const { error: retryError } = await supabase.from('selections').insert(fallbackChunk);
+           if (retryError) throw retryError;
+        } else if (error) {
+           throw error;
+        }
       }
       
       // Re-busca status do pagamento ao finalizar ou reseta se for nova seleção
@@ -364,17 +393,8 @@ const PublicGallery: React.FC = () => {
   };
 
   const handleSelectMorePhotos = () => {
-    if (paymentStatus === 'pago') {
-      const confirm = window.confirm("ATENÇÃO: Se você apertar em selecionar mais fotos, todas as imagens anteriores vão sumir. Certifique-se de fazer o download de todas as imagens da seleção atual para fazer uma nova seleção. Deseja continuar?");
-      if (confirm) {
-        setSelectedPhotos(new Set());
-        setIsFinished(false);
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      }
-    } else {
-      setIsFinished(false);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
+    setIsFinished(false);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   if (loading) return (
@@ -446,36 +466,38 @@ const PublicGallery: React.FC = () => {
               <p className="text-slate-500 font-bold max-w-md">Olá {client?.nome}, sua seleção de {selectedPhotos.size} fotos foi salva em nosso sistema.</p>
               
               {paymentStatus !== 'pago' ? (
-                <div className="bg-red-600/10 border border-red-600/20 px-8 py-4 rounded-2xl text-red-600 font-black text-[10px] uppercase tracking-widest flex items-center gap-4 animate-pulse">
-                   <div className="w-2 h-2 bg-red-600 rounded-full"></div>
-                   PAGAMENTO PENDENTE: Downloads bloqueados e marca d'água ativa
+                <div className="bg-red-600/10 border border-red-600/20 px-8 py-4 rounded-2xl text-red-600 font-black text-[10px] uppercase tracking-widest flex items-center gap-4 animate-pulse justify-center">
+                   <div className="w-2 h-2 bg-red-600 rounded-full shrink-0"></div>
+                   {(paidPhotos.size > 0 && selectedPhotos.size > paidPhotos.size) ? "NOVAS FOTOS SELECIONADAS: Aguardando liberação do fotógrafo" : "PAGAMENTO PENDENTE: Downloads bloqueados e marca d'água ativa"}
                 </div>
               ) : (
-                <div className="bg-emerald-600/10 border border-emerald-600/20 px-8 py-4 rounded-2xl text-emerald-600 font-black text-[10px] uppercase tracking-widest flex items-center gap-4">
-                   <div className="w-2 h-2 bg-emerald-600 rounded-full"></div>
+                <div className="bg-emerald-600/10 border border-emerald-600/20 px-8 py-4 rounded-2xl text-emerald-600 font-black text-[10px] uppercase tracking-widest flex items-center gap-4 justify-center">
+                   <div className="w-2 h-2 bg-emerald-600 rounded-full shrink-0"></div>
                    PEDIDO PAGO: Downloads liberados em alta resolução
                 </div>
               )}
            </header>
            
            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-8">
-              {photos.filter(p => selectedPhotos.has(p.id)).map(photo => (
+              {photos.filter(p => selectedPhotos.has(p.id)).map(photo => {
+                const isPhotoPaid = paidPhotos.has(photo.id) || paymentStatus === 'pago';
+                return (
                 <div key={photo.id} className="relative aspect-[3/4] rounded-3xl overflow-hidden group border border-white/5 bg-[#0a0a0a]">
                    {/* Se pago: mostra original. Se não: mostra thumb com marca d'água */}
                    <img 
-                     src={paymentStatus === 'pago' ? `${R2_CONFIG.publicUrl}/${photo.r2_key_original}` : `${R2_CONFIG.publicUrl}/${photo.r2_key_thumbnail}`} 
+                     src={isPhotoPaid ? `${R2_CONFIG.publicUrl}/${photo.r2_key_original}` : `${R2_CONFIG.publicUrl}/${photo.r2_key_thumbnail}`} 
                      className="w-full h-full object-cover" 
                    />
                    
                    {/* Marca d'água OBRIGATÓRIA se não estiver pago */}
-                   {paymentStatus !== 'pago' && (
+                   {!isPhotoPaid && (
                      <div className="absolute inset-0 flex items-center justify-center opacity-30 pointer-events-none p-6 rotate-[-15deg]">
                        {photographer?.marca_dagua_url ? <img src={photographer.marca_dagua_url} className="w-full h-full object-contain" /> : photographer?.logo_url ? <img src={photographer.logo_url} className="w-full h-full object-contain opacity-50" /> : <span className="text-white font-black text-xs uppercase tracking-[0.5em]">REYEL PRODUÇÕES</span>}
                      </div>
                    )}
 
                    {/* Botão de Download Flutuante (Apenas se pago) */}
-                   {paymentStatus === 'pago' && (
+                   {isPhotoPaid && (
                      <div className="absolute bottom-4 left-4 right-4 z-50">
                         <Button 
                           variant="primary" 
@@ -492,7 +514,7 @@ const PublicGallery: React.FC = () => {
                      </div>
                    )}
                 </div>
-              ))}
+              )})}
            </div>
            
            <div className="bg-[#0a0a0a] p-10 md:p-16 rounded-[3rem] max-w-2xl mx-auto border border-white/5 space-y-8">
